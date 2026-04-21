@@ -232,10 +232,12 @@ const TABLE = 'luna_cmv';
 async function sbFetch(path, opts = {}) {
   const { prefer, headers: extraHeaders, ...rest } = opts;
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    mode: 'cors',
     headers: {
       'apikey': SUPABASE_KEY,
       'Authorization': `Bearer ${SUPABASE_KEY}`,
       'Content-Type': 'application/json',
+      'Accept': 'application/json',
       ...(prefer ? { 'Prefer': prefer } : {}),
       ...(extraHeaders || {})
     },
@@ -275,9 +277,10 @@ function pad(n) { return String(n).padStart(2,'0'); }
 function toDateStr(y, m, d) { return y + '-' + pad(m) + '-' + pad(d); }
 
 async function loadMonth(store, year, month) {
-  const key  = cacheKey(store, year, month);
-  const from = toDateStr(year, month, 1);
-  const to   = toDateStr(year, month, 31);
+  const key          = cacheKey(store, year, month);
+  const from         = toDateStr(year, month, 1);
+  const lastDay      = new Date(year, month, 0).getDate();
+  const to           = toDateStr(year, month, lastDay);
   setStatus('loading', 'Carregando dados…');
   try {
     const rows = await sbFetch(
