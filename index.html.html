@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Luna Gelato & Caffè — Painel CMV</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bordo: #7B1D1D;
+    --bordo-light: #9B2D2D;
+    --bordo-dark: #5A1212;
+    --cream: #F9F4EE;
+    --cream-dark: #EDE5D8;
+    --warm-gray: #C8B8A2;
+    --sand: #D4C4A8;
+    --text-dark: #2C1A10;
+    --text-mid: #5C4030;
+    --text-light: #8A6A50;
+    --white: #FFFFFF;
+    --green-ok: #4A7C59;
+    --red-alert: #B83232;
+    --amber: #C47A1E;
+    --shadow: 0 4px 24px rgba(90,18,18,0.10);
+    --shadow-lg: 0 12px 48px rgba(90,18,18,0.18);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Jost', sans-serif; background: var(--cream); color: var(--text-dark); min-height: 100vh; }
+
+  /* HEADER */
+  header { background: var(--bordo-dark); position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 20px rgba(0,0,0,0.3); }
+  .header-inner { display: flex; align-items: center; justify-content: space-between; padding: 14px 32px; max-width: 1600px; margin: 0 auto; gap: 12px; flex-wrap: wrap; }
+  .logo-area { display: flex; align-items: center; gap: 16px; }
+  .header-title { font-family: 'Cormorant Garamond', serif; font-size: 1.1rem; font-weight: 300; color: var(--sand); letter-spacing: 0.18em; text-transform: uppercase; border-left: 1px solid rgba(212,196,168,0.35); padding-left: 16px; }
+  .header-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .month-nav { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.08); border-radius: 8px; padding: 6px 14px; }
+  .month-nav button { background: none; border: none; color: var(--sand); font-size: 1.1rem; cursor: pointer; padding: 2px 6px; border-radius: 4px; transition: background 0.2s; line-height: 1; }
+  .month-nav button:hover { background: rgba(255,255,255,0.15); }
+  #month-label { font-family: 'Cormorant Garamond', serif; font-size: 1.1rem; color: var(--white); font-weight: 400; letter-spacing: 0.06em; min-width: 155px; text-align: center; }
+  .cmv-meta-area { display: flex; align-items: center; gap: 7px; font-size: 0.78rem; color: var(--sand); letter-spacing: 0.06em; }
+  .cmv-meta-area label { opacity: 0.7; }
+  #cmv-meta-input { width: 52px; background: rgba(255,255,255,0.12); border: 1px solid rgba(212,196,168,0.3); border-radius: 5px; color: var(--white); font-family: 'Jost', sans-serif; font-size: 0.82rem; padding: 4px 7px; text-align: center; outline: none; }
+  #cmv-meta-input:focus { border-color: var(--sand); }
+  .export-btn { display: flex; align-items: center; gap: 5px; background: rgba(255,255,255,0.10); border: 1px solid rgba(212,196,168,0.28); color: var(--sand); border-radius: 7px; padding: 6px 13px; font-family: 'Jost', sans-serif; font-size: 0.73rem; letter-spacing: 0.07em; cursor: pointer; transition: background 0.2s; }
+  .export-btn:hover { background: rgba(255,255,255,0.2); }
+
+  /* STORE TABS */
+  .store-tabs-wrapper { background: var(--bordo); border-bottom: 2px solid var(--bordo-dark); overflow-x: auto; scrollbar-width: thin; scrollbar-color: var(--bordo-light) transparent; }
+  .store-tabs { display: flex; padding: 0 24px; max-width: 1600px; margin: 0 auto; gap: 2px; }
+  .store-tab { background: none; border: none; color: rgba(249,244,238,0.6); font-family: 'Jost', sans-serif; font-size: 0.75rem; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; padding: 11px 15px; cursor: pointer; white-space: nowrap; transition: color 0.2s; border-bottom: 3px solid transparent; }
+  .store-tab:hover { color: var(--cream); }
+  .store-tab.active { color: var(--cream); border-bottom-color: var(--sand); }
+
+  /* MAIN */
+  main { max-width: 1600px; margin: 0 auto; padding: 26px 24px 60px; }
+  .status-bar { display: flex; align-items: center; gap: 8px; font-size: 0.72rem; color: var(--text-light); margin-bottom: 14px; }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green-ok); flex-shrink: 0; }
+  .status-dot.loading { background: var(--amber); animation: pulse 1s infinite; }
+  .status-dot.error { background: var(--red-alert); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .store-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 22px; gap: 18px; flex-wrap: wrap; }
+  .store-name-block h2 { font-family: 'Cormorant Garamond', serif; font-size: 2rem; font-weight: 600; color: var(--bordo-dark); line-height: 1; }
+  .store-name-block p { font-size: 0.77rem; color: var(--text-light); letter-spacing: 0.1em; text-transform: uppercase; margin-top: 4px; }
+  .summary-cards { display: flex; gap: 11px; flex-wrap: wrap; }
+  .summary-card { background: var(--white); border-radius: 10px; padding: 13px 18px; box-shadow: var(--shadow); min-width: 125px; border-top: 3px solid var(--cream-dark); }
+  .summary-card.ok { border-top-color: var(--green-ok); }
+  .summary-card.alert { border-top-color: var(--red-alert); }
+  .summary-card.warn { border-top-color: var(--amber); }
+  .s-label { font-size: 0.67rem; color: var(--text-light); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px; }
+  .s-val { font-family: 'Cormorant Garamond', serif; font-size: 1.45rem; font-weight: 600; color: var(--text-dark); line-height: 1; }
+  .s-sub { font-size: 0.68rem; color: var(--text-light); margin-top: 2px; }
+
+  /* CALENDAR */
+  .calendar-grid-wrapper { background: var(--white); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; }
+  .cal-header-row { display: grid; grid-template-columns: repeat(7, 1fr); background: var(--cream-dark); border-bottom: 1px solid var(--sand); }
+  .cal-dow { text-align: center; padding: 10px 4px; font-size: 0.67rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-mid); }
+  .cal-dow.weekend { color: var(--bordo); }
+  .cal-body { display: grid; grid-template-columns: repeat(7, 1fr); }
+  .cal-cell { border-right: 1px solid var(--cream-dark); border-bottom: 1px solid var(--cream-dark); min-height: 110px; padding: 8px; cursor: pointer; transition: background 0.13s; }
+  .cal-cell:hover { background: #FFF8F2; }
+  .cal-cell:nth-child(7n) { border-right: none; }
+  .cal-cell.empty { background: #F4EFE8; cursor: default; }
+  .cal-cell.empty:hover { background: #F4EFE8; }
+  .cal-cell.today { background: #FFF8F0; }
+  .day-num { font-family: 'Cormorant Garamond', serif; font-size: 1.1rem; font-weight: 600; color: var(--text-mid); line-height: 1; margin-bottom: 6px; }
+  .cal-cell.weekend .day-num { color: var(--bordo); }
+  .today .day-num { background: var(--bordo); color: white; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; }
+  .cmv-display { display: flex; flex-direction: column; gap: 3px; margin-top: 2px; }
+  .cmv-line { font-size: 0.72rem; color: var(--text-mid); font-weight: 500; }
+  .cmv-line span { color: var(--text-light); font-size: 0.63rem; font-weight: 400; }
+  .cmv-pill { display: inline-block; border-radius: 99px; font-size: 0.59rem; font-weight: 600; letter-spacing: 0.04em; padding: 2px 6px; margin-top: 3px; }
+  .pill-ok { background: #E6F4EA; color: var(--green-ok); }
+  .pill-alert { background: #FDECEA; color: var(--red-alert); }
+  .pill-warn { background: #FFF3E0; color: var(--amber); }
+  .hint-add { font-size: 0.63rem; color: #C8B8A2; margin-top: 4px; }
+
+  /* MODAL */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(44,26,16,0.55); z-index: 200; backdrop-filter: blur(3px); align-items: center; justify-content: center; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--white); border-radius: 16px; padding: 32px; width: 360px; max-width: 95vw; box-shadow: var(--shadow-lg); position: relative; animation: modalIn 0.22s ease; }
+  @keyframes modalIn { from{opacity:0;transform:translateY(-14px) scale(0.97);}to{opacity:1;transform:translateY(0) scale(1);} }
+  .modal h3 { font-family: 'Cormorant Garamond', serif; font-size: 1.45rem; color: var(--bordo-dark); margin-bottom: 3px; }
+  .modal-sub { font-size: 0.74rem; color: var(--text-light); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 20px; }
+  .modal-field { margin-bottom: 13px; }
+  .modal-field label { display: block; font-size: 0.71rem; color: var(--text-light); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 5px; }
+  .modal-field input { width: 100%; border: 1px solid var(--cream-dark); border-radius: 8px; padding: 9px 12px; font-family: 'Jost', sans-serif; font-size: 0.9rem; color: var(--text-dark); background: var(--cream); outline: none; transition: border-color 0.2s; }
+  .modal-field input:focus { border-color: var(--bordo-light); background: white; }
+  .modal-note { font-size: 0.68rem; color: var(--text-light); margin-top: 3px; }
+  .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+  .btn-primary { flex: 1; background: var(--bordo); color: white; border: none; border-radius: 8px; padding: 10px; font-family: 'Jost', sans-serif; font-size: 0.82rem; font-weight: 500; letter-spacing: 0.06em; cursor: pointer; transition: background 0.2s; }
+  .btn-primary:hover { background: var(--bordo-light); }
+  .btn-primary:disabled { background: var(--warm-gray); cursor: not-allowed; }
+  .btn-secondary { background: var(--cream-dark); color: var(--text-mid); border: none; border-radius: 8px; padding: 10px 16px; font-family: 'Jost', sans-serif; font-size: 0.82rem; cursor: pointer; transition: background 0.2s; }
+  .btn-secondary:hover { background: var(--sand); }
+  .modal-close { position: absolute; top: 15px; right: 15px; background: none; border: none; font-size: 1.1rem; color: var(--text-light); cursor: pointer; }
+
+  /* TOAST */
+  .toast { position: fixed; bottom: 24px; right: 24px; background: var(--bordo-dark); color: var(--sand); font-size: 0.78rem; padding: 10px 20px; border-radius: 8px; box-shadow: var(--shadow-lg); opacity: 0; transform: translateY(10px); transition: all 0.28s; pointer-events: none; z-index: 300; }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.error { background: var(--red-alert); color: white; }
+
+  footer { text-align: center; padding: 20px; font-size: 0.69rem; color: var(--text-light); letter-spacing: 0.07em; border-top: 1px solid var(--cream-dark); }
+
+  @media (max-width: 768px) {
+    .header-inner { padding: 10px 14px; }
+    .header-title { display: none; }
+    main { padding: 14px 10px 40px; }
+    .cal-cell { min-height: 80px; padding: 5px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="logo-area">
+      <svg height="42" viewBox="0 0 240 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <text x="0" y="40" font-family="Georgia,serif" font-size="42" font-weight="bold" fill="#D4C4A8" letter-spacing="3">LUNA</text>
+        <text x="2" y="51" font-family="Georgia,serif" font-size="9" fill="#C8B8A2" letter-spacing="4.5">GELATO &amp; CAFFÈ</text>
+      </svg>
+      <span class="header-title">Painel de CMV</span>
+    </div>
+    <div class="header-right">
+      <div class="cmv-meta-area">
+        <label>Meta CMV</label>
+        <input type="number" id="cmv-meta-input" value="30" min="1" max="100" step="0.5"> %
+      </div>
+      <div class="month-nav">
+        <button id="prev-month">&#8592;</button>
+        <span id="month-label">—</span>
+        <button id="next-month">&#8594;</button>
+      </div>
+      <button class="export-btn" onclick="exportCSV()">&#8595; Exportar CSV</button>
+    </div>
+  </div>
+</header>
+
+<div class="store-tabs-wrapper">
+  <div class="store-tabs" id="store-tabs"></div>
+</div>
+
+<main>
+  <div class="status-bar">
+    <div class="status-dot loading" id="status-dot"></div>
+    <span id="status-text">Conectando ao Supabase…</span>
+  </div>
+  <div class="store-header">
+    <div class="store-name-block">
+      <h2 id="active-store-name">—</h2>
+      <p>Calendário de CMV Diário</p>
+    </div>
+    <div class="summary-cards" id="summary-cards"></div>
+  </div>
+  <div class="calendar-grid-wrapper">
+    <div class="cal-header-row">
+      <div class="cal-dow">Dom</div>
+      <div class="cal-dow">Seg</div>
+      <div class="cal-dow">Ter</div>
+      <div class="cal-dow">Qua</div>
+      <div class="cal-dow">Qui</div>
+      <div class="cal-dow">Sex</div>
+      <div class="cal-dow weekend">Sáb</div>
+    </div>
+    <div class="cal-body" id="cal-body"></div>
+  </div>
+</main>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <h3 id="modal-title">—</h3>
+    <div class="modal-sub" id="modal-sub">—</div>
+    <div class="modal-field">
+      <label>CMV em Valor (R$)</label>
+      <input type="number" id="modal-rs" placeholder="Ex: 1250.00" step="0.01" min="0">
+      <div class="modal-note">Custo total de mercadoria consumida no dia</div>
+    </div>
+    <div class="modal-field">
+      <label>CMV em Percentual (%)</label>
+      <input type="number" id="modal-pct" placeholder="Ex: 28.5" step="0.01" min="0" max="100">
+      <div class="modal-note">CMV% = Custo ÷ Faturamento × 100</div>
+    </div>
+    <div class="modal-field">
+      <label>Faturamento do Dia (R$) — opcional</label>
+      <input type="number" id="modal-fat" placeholder="Ex: 4200.00" step="0.01" min="0">
+      <div class="modal-note">Se informado junto ao CMV R$, o % será calculado automaticamente</div>
+    </div>
+    <div class="modal-field">
+      <label>Observações</label>
+      <input type="text" id="modal-obs" placeholder="Ex: compra emergencial, alto desperdício…" maxlength="200">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="deleteDay()">Excluir</button>
+      <button class="btn-primary" id="modal-save-btn" onclick="saveDay()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<footer>
+  Luna Gelato & Caffè &nbsp;·&nbsp; Painel de Controle CMV &nbsp;·&nbsp; Dados sincronizados via Supabase
+</footer>
+
+<script>
+const SUPABASE_URL = 'https://pbuhwpcpdcnaheaywmdv.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBidWh3cGNwZGNuYWhlYXl3bWR2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyNjU5MzksImV4cCI6MjA5MTg0MTkzOX0.Mg4PVg96ZiV3C2Rn0GLQU9c7ui_41OlU6Ldqn5jcvyY';
+const TABLE = 'luna_cmv';
+
+async function sbFetch(path, opts = {}) {
+  const { prefer, headers: extraHeaders, ...rest } = opts;
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': 'application/json',
+      ...(prefer ? { 'Prefer': prefer } : {}),
+      ...(extraHeaders || {})
+    },
+    ...rest
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const txt = await res.text();
+  return txt ? JSON.parse(txt) : null;
+}
+
+const STORES = [
+  "Esplanada","Cianê","Tucuruvi","Indaiatuba",
+  "Maxi Jundiaí","Praça da Moça","Buriti Mogi Guaçu",
+  "Shopping Itaquera","SP Market","Iguatemi Campinas","Shopping Atrium"
+];
+const MONTHS_PT = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho",
+                   "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+
+let currentDate  = new Date();
+let currentMonth = currentDate.getMonth();
+let currentYear  = currentDate.getFullYear();
+let activeStore  = STORES[0];
+let monthCache   = {};
+let activeModalDay = null;
+
+function setStatus(state, text) {
+  const dot = document.getElementById('status-dot');
+  dot.className = 'status-dot' + (state !== 'ok' ? ' ' + state : '');
+  document.getElementById('status-text').textContent = text;
+}
+
+function cacheKey(store, year, month) {
+  return store + '_' + year + '_' + String(month).padStart(2,'0');
+}
+
+function pad(n) { return String(n).padStart(2,'0'); }
+function toDateStr(y, m, d) { return y + '-' + pad(m) + '-' + pad(d); }
+
+async function loadMonth(store, year, month) {
+  const key  = cacheKey(store, year, month);
+  const from = toDateStr(year, month, 1);
+  const to   = toDateStr(year, month, 31);
+  setStatus('loading', 'Carregando dados…');
+  try {
+    const rows = await sbFetch(
+      TABLE + '?loja=eq.' + encodeURIComponent(store) +
+      '&data=gte.' + from + '&data=lte.' + to + '&select=*',
+      { method: 'GET' }
+    );
+    const map = {};
+    (rows || []).forEach(r => { map[r.data] = r; });
+    monthCache[key] = map;
+    setStatus('ok', 'Conectado ao Supabase · ' + new Date().toLocaleTimeString('pt-BR'));
+    return map;
+  } catch(e) {
+    setStatus('error', 'Erro: ' + e.message);
+    return {};
+  }
+}
+
+function getCachedDay(store, year, month, day) {
+  const key  = cacheKey(store, year, month);
+  const date = toDateStr(year, month, day);
+  return (monthCache[key] || {})[date] || null;
+}
+
+function buildTabs() {
+  const c = document.getElementById('store-tabs');
+  c.innerHTML = '';
+  STORES.forEach(store => {
+    const btn = document.createElement('button');
+    btn.className = 'store-tab' + (store === activeStore ? ' active' : '');
+    btn.textContent = store;
+    btn.onclick = async () => {
+      activeStore = store;
+      buildTabs();
+      await loadMonth(activeStore, currentYear, currentMonth + 1);
+      buildCalendar();
+    };
+    c.appendChild(btn);
+  });
+}
+
+function buildCalendar() {
+  document.getElementById('active-store-name').textContent = activeStore;
+  document.getElementById('month-label').textContent = MONTHS_PT[currentMonth] + ' ' + currentYear;
+
+  const body        = document.getElementById('cal-body');
+  body.innerHTML    = '';
+  const firstDay    = new Date(currentYear, currentMonth, 1).getDay();
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+  const today       = new Date();
+  const meta        = getMeta();
+
+  for (let i = 0; i < firstDay; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'cal-cell empty';
+    body.appendChild(cell);
+  }
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const cell   = document.createElement('div');
+    const dow    = new Date(currentYear, currentMonth, d).getDay();
+    const isToday= d === today.getDate() && currentMonth === today.getMonth() && currentYear === today.getFullYear();
+    const isWEnd = dow === 0 || dow === 6;
+    cell.className = 'cal-cell' + (isToday ? ' today' : '') + (isWEnd ? ' weekend' : '');
+
+    const dayNum = document.createElement('div');
+    dayNum.className = 'day-num';
+    dayNum.textContent = d;
+    cell.appendChild(dayNum);
+
+    const data    = getCachedDay(activeStore, currentYear, currentMonth + 1, d);
+    const display = document.createElement('div');
+    display.className = 'cmv-display';
+
+    if (data) {
+      if (data.cmv_rs != null) {
+        const l = document.createElement('div');
+        l.className = 'cmv-line';
+        l.innerHTML = '<span>R$</span> ' + fmt(data.cmv_rs);
+        display.appendChild(l);
+      }
+      if (data.cmv_pct != null) {
+        const pct = parseFloat(data.cmv_pct);
+        const l   = document.createElement('div');
+        l.className = 'cmv-line';
+        l.innerHTML = '<span>CMV</span> ' + fmt(pct) + '%';
+        display.appendChild(l);
+        let pillCls = 'pill-ok', pillTxt = '✓ OK';
+        if (pct > meta * 1.1)  { pillCls = 'pill-alert'; pillTxt = '⚠ Acima'; }
+        else if (pct > meta)   { pillCls = 'pill-warn';  pillTxt = '~ Atenção'; }
+        const pill = document.createElement('div');
+        pill.className = 'cmv-pill ' + pillCls;
+        pill.textContent = pillTxt;
+        display.appendChild(pill);
+      }
+    } else {
+      const hint = document.createElement('div');
+      hint.className = 'hint-add';
+      hint.textContent = '+ lançar CMV';
+      display.appendChild(hint);
+    }
+
+    cell.appendChild(display);
+    cell.onclick = () => openModal(d, data);
+    body.appendChild(cell);
+  }
+  buildSummary();
+}
+
+function buildSummary() {
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+  const meta = getMeta();
+  const map  = monthCache[cacheKey(activeStore, currentYear, currentMonth + 1)] || {};
+  let totalRS = 0, totalDays = 0, alertDays = 0, sumPct = 0, pctDays = 0;
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const row = map[toDateStr(currentYear, currentMonth + 1, d)];
+    if (!row) continue;
+    if (row.cmv_rs != null)  { totalRS += parseFloat(row.cmv_rs); totalDays++; }
+    if (row.cmv_pct != null) {
+      sumPct += parseFloat(row.cmv_pct); pctDays++;
+      if (parseFloat(row.cmv_pct) > meta) alertDays++;
+    }
+  }
+
+  const avgPct = pctDays > 0 ? sumPct / pctDays : null;
+  const c = document.getElementById('summary-cards');
+  c.innerHTML = '';
+
+  function card(label, val, sub, cls) {
+    const el = document.createElement('div');
+    el.className = 'summary-card ' + (cls || '');
+    el.innerHTML = '<div class="s-label">' + label + '</div>' +
+                   '<div class="s-val">'   + val   + '</div>' +
+                   '<div class="s-sub">'   + sub   + '</div>';
+    return el;
+  }
+
+  c.appendChild(card('CMV Total (mês)', 'R$ ' + fmt(totalRS), totalDays + ' dias lançados', ''));
+  if (avgPct !== null) {
+    const cls = avgPct > meta * 1.1 ? 'alert' : avgPct > meta ? 'warn' : 'ok';
+    c.appendChild(card('CMV Médio', fmt(avgPct) + '%', 'Meta: ' + meta + '%', cls));
+  }
+  c.appendChild(card('Dias Acima da Meta', String(alertDays), 'acima do CMV meta', alertDays > 0 ? 'alert' : 'ok'));
+  c.appendChild(card('Dias Lançados', totalDays + '/' + daysInMonth, 'no mês', ''));
+}
+
+function openModal(day, existing) {
+  activeModalDay = day;
+  const date    = new Date(currentYear, currentMonth, day);
+  const weekDay = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'][date.getDay()];
+  document.getElementById('modal-title').textContent = pad(day) + ' de ' + MONTHS_PT[currentMonth];
+  document.getElementById('modal-sub').textContent   = activeStore + ' · ' + weekDay;
+  document.getElementById('modal-rs').value  = existing?.cmv_rs      ?? '';
+  document.getElementById('modal-pct').value = existing?.cmv_pct     ?? '';
+  document.getElementById('modal-fat').value = existing?.faturamento  ?? '';
+  document.getElementById('modal-obs').value = existing?.observacoes  ?? '';
+  const btn = document.getElementById('modal-save-btn');
+  btn.disabled    = false;
+  btn.textContent = 'Salvar';
+  document.getElementById('modal-overlay').classList.add('open');
+
+  const rsIn  = document.getElementById('modal-rs');
+  const fatIn = document.getElementById('modal-fat');
+  const pctIn = document.getElementById('modal-pct');
+  function autoCalc() {
+    const rs = parseFloat(rsIn.value), fat = parseFloat(fatIn.value);
+    if (rs > 0 && fat > 0) pctIn.value = ((rs / fat) * 100).toFixed(2);
+  }
+  rsIn.oninput  = autoCalc;
+  fatIn.oninput = autoCalc;
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+  activeModalDay = null;
+}
+
+async function saveDay() {
+  if (activeModalDay === null) return;
+  const btn  = document.getElementById('modal-save-btn');
+  btn.disabled    = true;
+  btn.textContent = 'Salvando…';
+
+  const day     = activeModalDay;
+  const dateStr = toDateStr(currentYear, currentMonth + 1, day);
+  const payload = {
+    loja:        activeStore,
+    data:        dateStr,
+    cmv_rs:      parseFloat(document.getElementById('modal-rs').value)  || null,
+    cmv_pct:     parseFloat(document.getElementById('modal-pct').value) || null,
+    faturamento: parseFloat(document.getElementById('modal-fat').value) || null,
+    observacoes: document.getElementById('modal-obs').value.trim() || null
+  };
+
+  try {
+    // Upsert: insert or update on conflict (loja, data)
+    await sbFetch(TABLE, {
+      method:  'POST',
+      prefer:  'resolution=merge-duplicates,return=minimal',
+      body:    JSON.stringify(payload)
+    });
+    const key = cacheKey(activeStore, currentYear, currentMonth + 1);
+    if (!monthCache[key]) monthCache[key] = {};
+    monthCache[key][dateStr] = payload;
+    closeModal();
+    buildCalendar();
+    showToast('✓ Dados salvos com sucesso', false);
+  } catch(e) {
+    showToast('Erro ao salvar: ' + e.message, true);
+    btn.disabled    = false;
+    btn.textContent = 'Salvar';
+  }
+}
+
+async function deleteDay() {
+  if (activeModalDay === null) return;
+  const dateStr = toDateStr(currentYear, currentMonth + 1, activeModalDay);
+  try {
+    await sbFetch(
+      TABLE + '?loja=eq.' + encodeURIComponent(activeStore) + '&data=eq.' + dateStr,
+      { method: 'DELETE', prefer: 'return=minimal' }
+    );
+    const key = cacheKey(activeStore, currentYear, currentMonth + 1);
+    if (monthCache[key]) delete monthCache[key][dateStr];
+    closeModal();
+    buildCalendar();
+    showToast('Registro excluído', false);
+  } catch(e) {
+    showToast('Erro ao excluir: ' + e.message, true);
+  }
+}
+
+function exportCSV() {
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+  let csv = '\uFEFFLoja,Data,CMV R$,CMV %,Faturamento R$,Observações\n';
+  STORES.forEach(store => {
+    const map = monthCache[cacheKey(store, currentYear, currentMonth + 1)] || {};
+    for (let d = 1; d <= daysInMonth; d++) {
+      const row = map[toDateStr(currentYear, currentMonth + 1, d)];
+      if (row) {
+        csv += '"' + store + '","' + row.data + '","' +
+               (row.cmv_rs ?? '') + '","' + (row.cmv_pct ?? '') + '","' +
+               (row.faturamento ?? '') + '","' + (row.observacoes ?? '') + '"\n';
+      }
+    }
+  });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = 'Luna_CMV_' + MONTHS_PT[currentMonth] + '_' + currentYear + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function getMeta() { return parseFloat(document.getElementById('cmv-meta-input').value) || 30; }
+function fmt(val) {
+  const n = parseFloat(val);
+  if (isNaN(n)) return '—';
+  return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+let toastTimer;
+function showToast(msg, isError) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className   = 'toast show' + (isError ? ' error' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = 'toast'; }, 2800);
+}
+
+document.getElementById('prev-month').onclick = async () => {
+  currentMonth--;
+  if (currentMonth < 0) { currentMonth = 11; currentYear--; }
+  await loadMonth(activeStore, currentYear, currentMonth + 1);
+  buildCalendar();
+};
+document.getElementById('next-month').onclick = async () => {
+  currentMonth++;
+  if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+  await loadMonth(activeStore, currentYear, currentMonth + 1);
+  buildCalendar();
+};
+document.getElementById('modal-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-overlay')) closeModal();
+});
+document.getElementById('cmv-meta-input').addEventListener('change', buildCalendar);
+
+// INIT
+(async () => {
+  buildTabs();
+  await loadMonth(activeStore, currentYear, currentMonth + 1);
+  buildCalendar();
+  // Background-load remaining stores
+  for (const store of STORES) {
+    if (store !== activeStore) loadMonth(store, currentYear, currentMonth + 1).catch(() => {});
+  }
+})();
+</script>
+</body>
+</html>
