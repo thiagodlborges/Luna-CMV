@@ -20,15 +20,18 @@
     --text-light: #8A6A50;
     --white: #FFFFFF;
     --green-ok: #4A7C59;
+    --green-bg: #E6F4EA;
     --red-alert: #B83232;
+    --red-bg: #FDECEA;
     --amber: #C47A1E;
+    --amber-bg: #FFF3E0;
     --shadow: 0 4px 24px rgba(90,18,18,0.10);
     --shadow-lg: 0 12px 48px rgba(90,18,18,0.18);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Jost', sans-serif; background: var(--cream); color: var(--text-dark); min-height: 100vh; }
 
-  /* HEADER */
+  /* ── HEADER ── */
   header { background: var(--bordo-dark); position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 20px rgba(0,0,0,0.3); }
   .header-inner { display: flex; align-items: center; justify-content: space-between; padding: 14px 32px; max-width: 1600px; margin: 0 auto; gap: 12px; flex-wrap: wrap; }
   .logo-area { display: flex; align-items: center; gap: 16px; }
@@ -41,24 +44,33 @@
   .cmv-meta-area { display: flex; align-items: center; gap: 7px; font-size: 0.78rem; color: var(--sand); letter-spacing: 0.06em; }
   .cmv-meta-area label { opacity: 0.7; }
   #cmv-meta-input { width: 52px; background: rgba(255,255,255,0.12); border: 1px solid rgba(212,196,168,0.3); border-radius: 5px; color: var(--white); font-family: 'Jost', sans-serif; font-size: 0.82rem; padding: 4px 7px; text-align: center; outline: none; }
+
   #cmv-meta-input:focus { border-color: var(--sand); }
-  .export-btn { display: flex; align-items: center; gap: 5px; background: rgba(255,255,255,0.10); border: 1px solid rgba(212,196,168,0.28); color: var(--sand); border-radius: 7px; padding: 6px 13px; font-family: 'Jost', sans-serif; font-size: 0.73rem; letter-spacing: 0.07em; cursor: pointer; transition: background 0.2s; }
+  .export-btn { display: flex; align-items: center; gap: 5px; background: rgba(255,255,255,0.10); border: 1px solid rgba(212,196,168,0.28); color: var(--sand); border-radius: 7px; padding: 6px 13px; font-family: 'Jost', sans-serif; font-size: 0.73rem; letter-spacing: 0.07em; cursor: pointer; transition: background 0.2s; white-space: nowrap; }
   .export-btn:hover { background: rgba(255,255,255,0.2); }
 
-  /* STORE TABS */
-  .store-tabs-wrapper { background: var(--bordo); border-bottom: 2px solid var(--bordo-dark); overflow-x: auto; scrollbar-width: thin; scrollbar-color: var(--bordo-light) transparent; }
-  .store-tabs { display: flex; padding: 0 24px; max-width: 1600px; margin: 0 auto; gap: 2px; }
-  .store-tab { background: none; border: none; color: rgba(249,244,238,0.6); font-family: 'Jost', sans-serif; font-size: 0.75rem; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; padding: 11px 15px; cursor: pointer; white-space: nowrap; transition: color 0.2s; border-bottom: 3px solid transparent; }
-  .store-tab:hover { color: var(--cream); }
-  .store-tab.active { color: var(--cream); border-bottom-color: var(--sand); }
+  /* ── NAV TABS ── */
+  .nav-tabs-wrapper { background: var(--bordo); border-bottom: 2px solid var(--bordo-dark); overflow-x: auto; scrollbar-width: thin; scrollbar-color: var(--bordo-light) transparent; }
+  .nav-tabs { display: flex; padding: 0 24px; max-width: 1600px; margin: 0 auto; gap: 2px; }
+  .nav-tab { background: none; border: none; color: rgba(249,244,238,0.6); font-family: 'Jost', sans-serif; font-size: 0.75rem; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; padding: 11px 15px; cursor: pointer; white-space: nowrap; transition: color 0.2s; border-bottom: 3px solid transparent; }
+  .nav-tab:hover { color: var(--cream); }
+  .nav-tab.active { color: var(--cream); border-bottom-color: var(--sand); }
+  .nav-tab.resumo-tab { color: var(--sand); font-weight: 600; border-right: 1px solid rgba(212,196,168,0.2); margin-right: 4px; padding-right: 20px; }
+  .nav-tab.resumo-tab.active { border-bottom-color: #D4C4A8; color: white; }
 
-  /* MAIN */
+  /* ── MAIN ── */
   main { max-width: 1600px; margin: 0 auto; padding: 26px 24px 60px; }
-  .status-bar { display: flex; align-items: center; gap: 8px; font-size: 0.72rem; color: var(--text-light); margin-bottom: 14px; }
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* STATUS */
+  .status-bar { display: flex; align-items: center; gap: 8px; font-size: 0.72rem; color: var(--text-light); margin-bottom: 18px; }
   .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green-ok); flex-shrink: 0; }
   .status-dot.loading { background: var(--amber); animation: pulse 1s infinite; }
   .status-dot.error { background: var(--red-alert); }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* STORE HEADER */
   .store-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 22px; gap: 18px; flex-wrap: wrap; }
   .store-name-block h2 { font-family: 'Cormorant Garamond', serif; font-size: 2rem; font-weight: 600; color: var(--bordo-dark); line-height: 1; }
   .store-name-block p { font-size: 0.77rem; color: var(--text-light); letter-spacing: 0.1em; text-transform: uppercase; margin-top: 4px; }
@@ -90,10 +102,78 @@
   .cmv-line { font-size: 0.72rem; color: var(--text-mid); font-weight: 500; }
   .cmv-line span { color: var(--text-light); font-size: 0.63rem; font-weight: 400; }
   .cmv-pill { display: inline-block; border-radius: 99px; font-size: 0.59rem; font-weight: 600; letter-spacing: 0.04em; padding: 2px 6px; margin-top: 3px; }
-  .pill-ok { background: #E6F4EA; color: var(--green-ok); }
-  .pill-alert { background: #FDECEA; color: var(--red-alert); }
-  .pill-warn { background: #FFF3E0; color: var(--amber); }
+  .pill-ok { background: var(--green-bg); color: var(--green-ok); }
+  .pill-alert { background: var(--red-bg); color: var(--red-alert); }
+  .pill-warn { background: var(--amber-bg); color: var(--amber); }
   .hint-add { font-size: 0.63rem; color: #C8B8A2; margin-top: 4px; }
+
+  /* ── RESUMO GERAL ── */
+  .resumo-header { margin-bottom: 28px; }
+  .resumo-header h2 { font-family: 'Cormorant Garamond', serif; font-size: 2rem; font-weight: 600; color: var(--bordo-dark); }
+  .resumo-header p { font-size: 0.77rem; color: var(--text-light); letter-spacing: 0.1em; text-transform: uppercase; margin-top: 4px; }
+
+  .resumo-filters { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; background: var(--white); border-radius: 12px; padding: 16px 20px; box-shadow: var(--shadow); }
+  .resumo-filters label { font-size: 0.72rem; color: var(--text-light); letter-spacing: 0.08em; text-transform: uppercase; }
+  .resumo-filters select, .resumo-filters input[type="date"] {
+    border: 1px solid var(--cream-dark); border-radius: 7px; padding: 7px 11px;
+    font-family: 'Jost', sans-serif; font-size: 0.82rem; color: var(--text-dark);
+    background: var(--cream); outline: none; cursor: pointer;
+  }
+  .resumo-filters select:focus, .resumo-filters input[type="date"]:focus { border-color: var(--bordo-light); }
+  .filter-sep { color: var(--warm-gray); font-size: 0.8rem; }
+  .btn-buscar { background: var(--bordo); color: white; border: none; border-radius: 7px; padding: 8px 20px; font-family: 'Jost', sans-serif; font-size: 0.8rem; font-weight: 500; letter-spacing: 0.06em; cursor: pointer; transition: background 0.2s; }
+  .btn-buscar:hover { background: var(--bordo-light); }
+  .btn-buscar:disabled { background: var(--warm-gray); cursor: not-allowed; }
+
+  /* KPI STRIP */
+  .resumo-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .kpi-card { background: var(--white); border-radius: 12px; padding: 16px 20px; box-shadow: var(--shadow); border-left: 4px solid var(--cream-dark); }
+  .kpi-card.ok   { border-left-color: var(--green-ok); }
+  .kpi-card.warn { border-left-color: var(--amber); }
+  .kpi-card.alert{ border-left-color: var(--red-alert); }
+  .kpi-label { font-size: 0.67rem; color: var(--text-light); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 6px; }
+  .kpi-val { font-family: 'Cormorant Garamond', serif; font-size: 1.8rem; font-weight: 600; color: var(--text-dark); line-height: 1; }
+  .kpi-sub { font-size: 0.68rem; color: var(--text-light); margin-top: 4px; }
+
+  /* TABELA RESUMO */
+  .resumo-table-wrap { background: var(--white); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; margin-bottom: 28px; }
+  .resumo-table-wrap table { width: 100%; border-collapse: collapse; }
+  .resumo-table-wrap thead tr { background: var(--bordo-dark); }
+  .resumo-table-wrap thead th { color: var(--sand); font-family: 'Jost', sans-serif; font-size: 0.68rem; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; padding: 12px 16px; text-align: left; white-space: nowrap; }
+  .resumo-table-wrap thead th.num { text-align: right; }
+  .resumo-table-wrap tbody tr { border-bottom: 1px solid var(--cream-dark); transition: background 0.12s; }
+  .resumo-table-wrap tbody tr:last-child { border-bottom: none; }
+  .resumo-table-wrap tbody tr:hover { background: #FFF8F2; }
+  .resumo-table-wrap tbody td { padding: 11px 16px; font-size: 0.82rem; color: var(--text-dark); }
+  .resumo-table-wrap tbody td.num { text-align: right; font-weight: 500; }
+  .resumo-table-wrap tbody td.store-name { font-weight: 600; color: var(--bordo-dark); font-size: 0.85rem; }
+  .resumo-table-wrap tfoot tr { background: var(--cream-dark); border-top: 2px solid var(--sand); }
+  .resumo-table-wrap tfoot td { padding: 11px 16px; font-size: 0.82rem; font-weight: 700; color: var(--text-dark); }
+  .resumo-table-wrap tfoot td.num { text-align: right; }
+
+  .tag-ok    { display: inline-block; background: var(--green-bg); color: var(--green-ok); border-radius: 99px; font-size: 0.65rem; font-weight: 600; padding: 2px 9px; }
+  .tag-warn  { display: inline-block; background: var(--amber-bg); color: var(--amber);    border-radius: 99px; font-size: 0.65rem; font-weight: 600; padding: 2px 9px; }
+  .tag-alert { display: inline-block; background: var(--red-bg);   color: var(--red-alert);border-radius: 99px; font-size: 0.65rem; font-weight: 600; padding: 2px 9px; }
+  .tag-none  { display: inline-block; background: var(--cream-dark);color: var(--text-light);border-radius: 99px; font-size: 0.65rem; font-weight: 500; padding: 2px 9px; }
+
+  /* RANKING BAR CHART */
+  .ranking-section { margin-bottom: 28px; }
+  .section-title { font-family: 'Cormorant Garamond', serif; font-size: 1.3rem; color: var(--bordo-dark); margin-bottom: 14px; font-weight: 600; }
+  .rank-list { display: flex; flex-direction: column; gap: 8px; }
+  .rank-row { display: flex; align-items: center; gap: 12px; }
+  .rank-name { width: 160px; font-size: 0.78rem; color: var(--text-mid); flex-shrink: 0; text-align: right; }
+  .rank-bar-wrap { flex: 1; background: var(--cream-dark); border-radius: 99px; height: 20px; overflow: hidden; position: relative; }
+  .rank-bar { height: 100%; border-radius: 99px; background: var(--bordo); transition: width 0.6s ease; display: flex; align-items: center; padding-left: 8px; }
+  .rank-bar.ok   { background: var(--green-ok); }
+  .rank-bar.warn { background: var(--amber); }
+  .rank-bar.alert{ background: var(--red-alert); }
+  .rank-bar-val { font-size: 0.68rem; color: white; font-weight: 600; white-space: nowrap; }
+  .rank-pct-label { width: 52px; font-size: 0.75rem; color: var(--text-mid); font-weight: 600; flex-shrink: 0; }
+
+  /* EMPTY STATE */
+  .empty-state { text-align: center; padding: 60px 20px; color: var(--text-light); }
+  .empty-state .emoji { font-size: 2.5rem; margin-bottom: 12px; }
+  .empty-state p { font-size: 0.85rem; }
 
   /* MODAL */
   .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(44,26,16,0.55); z-index: 200; backdrop-filter: blur(3px); align-items: center; justify-content: center; }
@@ -122,11 +202,16 @@
 
   footer { text-align: center; padding: 20px; font-size: 0.69rem; color: var(--text-light); letter-spacing: 0.07em; border-top: 1px solid var(--cream-dark); }
 
+  @media (max-width: 900px) {
+    .resumo-table-wrap { overflow-x: auto; }
+    .rank-name { width: 110px; font-size: 0.72rem; }
+  }
   @media (max-width: 768px) {
     .header-inner { padding: 10px 14px; }
     .header-title { display: none; }
     main { padding: 14px 10px 40px; }
     .cal-cell { min-height: 80px; padding: 5px; }
+    .resumo-kpis { grid-template-columns: repeat(2, 1fr); }
   }
 </style>
 </head>
@@ -144,9 +229,9 @@
     <div class="header-right">
       <div class="cmv-meta-area">
         <label>Meta CMV</label>
-        <input type="number" id="cmv-meta-input" value="30" min="1" max="100" step="0.5"> %
+        <input type="number" id="cmv-meta-input" value="32" min="1" max="100" step="0.5"> %
       </div>
-      <div class="month-nav">
+      <div class="month-nav" id="month-nav-block">
         <button id="prev-month">&#8592;</button>
         <span id="month-label">—</span>
         <button id="next-month">&#8594;</button>
@@ -156,8 +241,11 @@
   </div>
 </header>
 
-<div class="store-tabs-wrapper">
-  <div class="store-tabs" id="store-tabs"></div>
+<div class="nav-tabs-wrapper">
+  <div class="nav-tabs" id="nav-tabs">
+    <button class="nav-tab resumo-tab active" onclick="showPage('resumo')">⊞ Resumo Geral</button>
+    <!-- store tabs inserted by JS -->
+  </div>
 </div>
 
 <main>
@@ -165,24 +253,88 @@
     <div class="status-dot loading" id="status-dot"></div>
     <span id="status-text">Conectando ao Supabase…</span>
   </div>
-  <div class="store-header">
-    <div class="store-name-block">
-      <h2 id="active-store-name">—</h2>
-      <p>Calendário de CMV Diário</p>
+
+  <!-- ══════════════ PÁGINA: RESUMO GERAL ══════════════ -->
+  <div class="page active" id="page-resumo">
+    <div class="resumo-header">
+      <h2>Resumo Geral</h2>
+      <p>CMV consolidado por período — todas as lojas</p>
     </div>
-    <div class="summary-cards" id="summary-cards"></div>
+
+    <!-- FILTROS -->
+    <div class="resumo-filters">
+      <label>Período</label>
+      <select id="resumo-tipo">
+        <option value="mes">Mês fechado</option>
+        <option value="intervalo">Intervalo de datas</option>
+      </select>
+      <div id="filtro-mes-block" style="display:flex;align-items:center;gap:10px;">
+        <select id="resumo-mes"></select>
+        <select id="resumo-ano"></select>
+      </div>
+      <div id="filtro-intervalo-block" style="display:none;align-items:center;gap:8px;">
+        <input type="date" id="resumo-de">
+        <span class="filter-sep">até</span>
+        <input type="date" id="resumo-ate">
+      </div>
+      <button class="btn-buscar" id="btn-buscar" onclick="carregarResumo()">Buscar</button>
+    </div>
+
+    <!-- KPIs -->
+    <div class="resumo-kpis" id="resumo-kpis" style="display:none;"></div>
+
+    <!-- TABELA -->
+    <div class="resumo-table-wrap" id="resumo-table-wrap" style="display:none;">
+      <table>
+        <thead>
+          <tr>
+            <th>Loja</th>
+            <th class="num">CMV Total (R$)</th>
+            <th class="num">Faturamento (R$)</th>
+            <th class="num">CMV Médio (%)</th>
+            <th class="num">Dias Lançados</th>
+            <th class="num">Dias Acima da Meta</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="resumo-tbody"></tbody>
+        <tfoot id="resumo-tfoot"></tfoot>
+      </table>
+    </div>
+
+    <!-- RANKING -->
+    <div class="ranking-section" id="ranking-section" style="display:none;">
+      <div class="section-title">Ranking de CMV por Loja</div>
+      <div class="rank-list" id="rank-list"></div>
+    </div>
+
+    <div class="empty-state" id="resumo-empty">
+      <div class="emoji">📊</div>
+      <p>Selecione o período e clique em <strong>Buscar</strong> para ver o resumo.</p>
+    </div>
   </div>
-  <div class="calendar-grid-wrapper">
-    <div class="cal-header-row">
-      <div class="cal-dow">Dom</div>
-      <div class="cal-dow">Seg</div>
-      <div class="cal-dow">Ter</div>
-      <div class="cal-dow">Qua</div>
-      <div class="cal-dow">Qui</div>
-      <div class="cal-dow">Sex</div>
-      <div class="cal-dow weekend">Sáb</div>
+
+  <!-- ══════════════ PÁGINA: LOJA (calendário) ══════════════ -->
+  <div class="page" id="page-loja">
+    <div class="store-header">
+      <div class="store-name-block">
+        <h2 id="active-store-name">—</h2>
+        <p>Calendário de CMV Diário</p>
+      </div>
+      <div class="summary-cards" id="summary-cards"></div>
     </div>
-    <div class="cal-body" id="cal-body"></div>
+    <div class="calendar-grid-wrapper">
+      <div class="cal-header-row">
+        <div class="cal-dow">Dom</div>
+        <div class="cal-dow">Seg</div>
+        <div class="cal-dow">Ter</div>
+        <div class="cal-dow">Qua</div>
+        <div class="cal-dow">Qui</div>
+        <div class="cal-dow">Sex</div>
+        <div class="cal-dow weekend">Sáb</div>
+      </div>
+      <div class="cal-body" id="cal-body"></div>
+    </div>
   </div>
 </main>
 
@@ -225,10 +377,28 @@
 </footer>
 
 <script>
+// ── CONFIG ──
 const SUPABASE_URL = 'https://pbuhwpcpdcnaheaywmdv.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBidWh3cGNwZGNuYWhlYXl3bWR2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyNjU5MzksImV4cCI6MjA5MTg0MTkzOX0.Mg4PVg96ZiV3C2Rn0GLQU9c7ui_41OlU6Ldqn5jcvyY';
 const TABLE = 'luna_cmv';
 
+const STORES = [
+  "Esplanada","Cianê","Tucuruvi","Indaiatuba",
+  "Maxi Jundiaí","Praça da Moça","Buriti Mogi Guaçu",
+  "Shopping Itaquera","SP Market","Iguatemi Campinas","Shopping Atrium"
+];
+const MONTHS_PT = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho",
+                   "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+
+let currentDate  = new Date();
+let currentMonth = currentDate.getMonth();
+let currentYear  = currentDate.getFullYear();
+let activeStore  = STORES[0];
+let activePage   = 'resumo';
+let monthCache   = {};
+let activeModalDay = null;
+
+// ── SUPABASE ──
 async function sbFetch(path, opts = {}) {
   const { prefer, headers: extraHeaders, ...rest } = opts;
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -248,39 +418,75 @@ async function sbFetch(path, opts = {}) {
   return txt ? JSON.parse(txt) : null;
 }
 
-const STORES = [
-  "Esplanada","Cianê","Tucuruvi","Indaiatuba",
-  "Maxi Jundiaí","Praça da Moça","Buriti Mogi Guaçu",
-  "Shopping Itaquera","SP Market","Iguatemi Campinas","Shopping Atrium"
-];
-const MONTHS_PT = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho",
-                   "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
-
-let currentDate  = new Date();
-let currentMonth = currentDate.getMonth();
-let currentYear  = currentDate.getFullYear();
-let activeStore  = STORES[0];
-let monthCache   = {};
-let activeModalDay = null;
-
 function setStatus(state, text) {
   const dot = document.getElementById('status-dot');
   dot.className = 'status-dot' + (state !== 'ok' ? ' ' + state : '');
   document.getElementById('status-text').textContent = text;
 }
 
-function cacheKey(store, year, month) {
-  return store + '_' + year + '_' + String(month).padStart(2,'0');
-}
-
+// ── HELPERS ──
 function pad(n) { return String(n).padStart(2,'0'); }
 function toDateStr(y, m, d) { return y + '-' + pad(m) + '-' + pad(d); }
+function getMeta() { return parseFloat(document.getElementById('cmv-meta-input').value) || 30; }
+function fmt(val, decimals=2) {
+  const n = parseFloat(val);
+  if (isNaN(n) || val === null || val === '') return '—';
+  return n.toLocaleString('pt-BR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+function cacheKey(store, year, month) { return store + '_' + year + '_' + pad(month); }
 
+// ── PAGE SWITCHING ──
+function showPage(page, store) {
+  activePage = page;
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+
+  const monthNavBlock = document.getElementById('month-nav-block');
+
+  if (page === 'resumo') {
+    document.getElementById('page-resumo').classList.add('active');
+    document.querySelector('.resumo-tab').classList.add('active');
+    monthNavBlock.style.display = 'none';
+  } else {
+    activeStore = store;
+    document.getElementById('page-loja').classList.add('active');
+    document.querySelectorAll('.nav-tab.store-tab').forEach(t => {
+      if (t.dataset.store === store) t.classList.add('active');
+    });
+    monthNavBlock.style.display = '';
+    loadMonth(store, currentYear, currentMonth + 1).then(buildCalendar);
+  }
+  buildNavTabs();
+}
+
+// ── NAV TABS ──
+function buildNavTabs() {
+  const container = document.getElementById('nav-tabs');
+  // Keep resumo tab, rebuild store tabs
+  const existing = container.querySelector('.resumo-tab');
+  container.innerHTML = '';
+  const resumoBtn = document.createElement('button');
+  resumoBtn.className = 'nav-tab resumo-tab' + (activePage === 'resumo' ? ' active' : '');
+  resumoBtn.innerHTML = '⊞ Resumo Geral';
+  resumoBtn.onclick = () => showPage('resumo');
+  container.appendChild(resumoBtn);
+
+  STORES.forEach(store => {
+    const btn = document.createElement('button');
+    btn.className = 'nav-tab store-tab' + (activePage === 'loja' && store === activeStore ? ' active' : '');
+    btn.dataset.store = store;
+    btn.textContent = store;
+    btn.onclick = () => showPage('loja', store);
+    container.appendChild(btn);
+  });
+}
+
+// ── MONTH CACHE ──
 async function loadMonth(store, year, month) {
-  const key          = cacheKey(store, year, month);
-  const from         = toDateStr(year, month, 1);
-  const lastDay      = new Date(year, month, 0).getDate();
-  const to           = toDateStr(year, month, lastDay);
+  const key     = cacheKey(store, year, month);
+  const from    = toDateStr(year, month, 1);
+  const lastDay = new Date(year, month, 0).getDate();
+  const to      = toDateStr(year, month, lastDay);
   setStatus('loading', 'Carregando dados…');
   try {
     const rows = await sbFetch(
@@ -291,7 +497,7 @@ async function loadMonth(store, year, month) {
     const map = {};
     (rows || []).forEach(r => { map[r.data] = r; });
     monthCache[key] = map;
-    setStatus('ok', 'Conectado ao Supabase · ' + new Date().toLocaleTimeString('pt-BR'));
+    setStatus('ok', 'Conectado · ' + new Date().toLocaleTimeString('pt-BR'));
     return map;
   } catch(e) {
     setStatus('error', 'Erro: ' + e.message);
@@ -305,23 +511,7 @@ function getCachedDay(store, year, month, day) {
   return (monthCache[key] || {})[date] || null;
 }
 
-function buildTabs() {
-  const c = document.getElementById('store-tabs');
-  c.innerHTML = '';
-  STORES.forEach(store => {
-    const btn = document.createElement('button');
-    btn.className = 'store-tab' + (store === activeStore ? ' active' : '');
-    btn.textContent = store;
-    btn.onclick = async () => {
-      activeStore = store;
-      buildTabs();
-      await loadMonth(activeStore, currentYear, currentMonth + 1);
-      buildCalendar();
-    };
-    c.appendChild(btn);
-  });
-}
-
+// ── CALENDAR ──
 function buildCalendar() {
   document.getElementById('active-store-name').textContent = activeStore;
   document.getElementById('month-label').textContent = MONTHS_PT[currentMonth] + ' ' + currentYear;
@@ -338,7 +528,6 @@ function buildCalendar() {
     cell.className = 'cal-cell empty';
     body.appendChild(cell);
   }
-
   for (let d = 1; d <= daysInMonth; d++) {
     const cell   = document.createElement('div');
     const dow    = new Date(currentYear, currentMonth, d).getDay();
@@ -382,7 +571,6 @@ function buildCalendar() {
       hint.textContent = '+ lançar CMV';
       display.appendChild(hint);
     }
-
     cell.appendChild(display);
     cell.onclick = () => openModal(d, data);
     body.appendChild(cell);
@@ -395,30 +583,21 @@ function buildSummary() {
   const meta = getMeta();
   const map  = monthCache[cacheKey(activeStore, currentYear, currentMonth + 1)] || {};
   let totalRS = 0, totalDays = 0, alertDays = 0, sumPct = 0, pctDays = 0;
-
   for (let d = 1; d <= daysInMonth; d++) {
     const row = map[toDateStr(currentYear, currentMonth + 1, d)];
     if (!row) continue;
     if (row.cmv_rs != null)  { totalRS += parseFloat(row.cmv_rs); totalDays++; }
-    if (row.cmv_pct != null) {
-      sumPct += parseFloat(row.cmv_pct); pctDays++;
-      if (parseFloat(row.cmv_pct) > meta) alertDays++;
-    }
+    if (row.cmv_pct != null) { sumPct += parseFloat(row.cmv_pct); pctDays++; if (parseFloat(row.cmv_pct) > meta) alertDays++; }
   }
-
   const avgPct = pctDays > 0 ? sumPct / pctDays : null;
   const c = document.getElementById('summary-cards');
   c.innerHTML = '';
-
   function card(label, val, sub, cls) {
     const el = document.createElement('div');
     el.className = 'summary-card ' + (cls || '');
-    el.innerHTML = '<div class="s-label">' + label + '</div>' +
-                   '<div class="s-val">'   + val   + '</div>' +
-                   '<div class="s-sub">'   + sub   + '</div>';
+    el.innerHTML = '<div class="s-label">' + label + '</div><div class="s-val">' + val + '</div><div class="s-sub">' + sub + '</div>';
     return el;
   }
-
   c.appendChild(card('CMV Total (mês)', 'R$ ' + fmt(totalRS), totalDays + ' dias lançados', ''));
   if (avgPct !== null) {
     const cls = avgPct > meta * 1.1 ? 'alert' : avgPct > meta ? 'warn' : 'ok';
@@ -428,6 +607,205 @@ function buildSummary() {
   c.appendChild(card('Dias Lançados', totalDays + '/' + daysInMonth, 'no mês', ''));
 }
 
+// ── RESUMO GERAL ──
+function initResumoFilters() {
+  const mesEl = document.getElementById('resumo-mes');
+  const anoEl = document.getElementById('resumo-ano');
+  MONTHS_PT.forEach((m, i) => {
+    const opt = document.createElement('option');
+    opt.value = i + 1; opt.textContent = m;
+    if (i === currentMonth) opt.selected = true;
+    mesEl.appendChild(opt);
+  });
+  for (let y = currentYear; y >= currentYear - 3; y--) {
+    const opt = document.createElement('option');
+    opt.value = y; opt.textContent = y;
+    anoEl.appendChild(opt);
+  }
+  document.getElementById('resumo-tipo').onchange = function() {
+    const isMes = this.value === 'mes';
+    document.getElementById('filtro-mes-block').style.display     = isMes ? 'flex' : 'none';
+    document.getElementById('filtro-intervalo-block').style.display = isMes ? 'none' : 'flex';
+  };
+  // default dates for interval
+  const hoje = new Date();
+  const primeiroDia = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+  document.getElementById('resumo-de').value  = primeiroDia.toISOString().slice(0,10);
+  document.getElementById('resumo-ate').value = hoje.toISOString().slice(0,10);
+}
+
+async function carregarResumo() {
+  const btn  = document.getElementById('btn-buscar');
+  btn.disabled = true; btn.textContent = 'Buscando…';
+  setStatus('loading', 'Carregando resumo de todas as lojas…');
+
+  let dateFrom, dateTo;
+  const tipo = document.getElementById('resumo-tipo').value;
+  if (tipo === 'mes') {
+    const mes = parseInt(document.getElementById('resumo-mes').value);
+    const ano = parseInt(document.getElementById('resumo-ano').value);
+    const lastDay = new Date(ano, mes, 0).getDate();
+    dateFrom = toDateStr(ano, mes, 1);
+    dateTo   = toDateStr(ano, mes, lastDay);
+  } else {
+    dateFrom = document.getElementById('resumo-de').value;
+    dateTo   = document.getElementById('resumo-ate').value;
+    if (!dateFrom || !dateTo) { showToast('Preencha as duas datas', true); btn.disabled = false; btn.textContent = 'Buscar'; return; }
+  }
+
+  try {
+    const rows = await sbFetch(
+      TABLE + '?data=gte.' + dateFrom + '&data=lte.' + dateTo + '&select=*&order=loja,data',
+      { method: 'GET' }
+    );
+
+    renderResumo(rows || [], dateFrom, dateTo);
+    setStatus('ok', 'Conectado · ' + new Date().toLocaleTimeString('pt-BR'));
+  } catch(e) {
+    setStatus('error', 'Erro: ' + e.message);
+    showToast('Erro ao buscar: ' + e.message, true);
+  }
+  btn.disabled = false; btn.textContent = 'Buscar';
+}
+
+function renderResumo(rows, dateFrom, dateTo) {
+  const meta = getMeta();
+  document.getElementById('resumo-empty').style.display = 'none';
+
+  // Agregar por loja
+  const byStore = {};
+  STORES.forEach(s => { byStore[s] = { rs: 0, fat: 0, sumPct: 0, pctDays: 0, dias: 0, alertDias: 0 }; });
+
+  rows.forEach(r => {
+    const s = r.loja;
+    if (!byStore[s]) return;
+    if (r.cmv_rs != null)  { byStore[s].rs  += parseFloat(r.cmv_rs);  byStore[s].dias++; }
+    if (r.faturamento != null) byStore[s].fat += parseFloat(r.faturamento);
+    if (r.cmv_pct != null) {
+      byStore[s].sumPct += parseFloat(r.cmv_pct);
+      byStore[s].pctDays++;
+      if (parseFloat(r.cmv_pct) > meta) byStore[s].alertDias++;
+    }
+  });
+
+  // KPIs globais
+  let totalRS = 0, totalFat = 0, sumAvg = 0, avgCount = 0, totalAlert = 0, totalDias = 0;
+  STORES.forEach(s => {
+    totalRS    += byStore[s].rs;
+    totalFat   += byStore[s].fat;
+    totalDias  += byStore[s].dias;
+    totalAlert += byStore[s].alertDias;
+    if (byStore[s].pctDays > 0) { sumAvg += byStore[s].sumPct / byStore[s].pctDays; avgCount++; }
+  });
+  const avgGlobal = avgCount > 0 ? sumAvg / avgCount : null;
+  const avgCls = avgGlobal === null ? '' : avgGlobal > meta * 1.1 ? 'alert' : avgGlobal > meta ? 'warn' : 'ok';
+
+  // Render KPIs
+  const kpiEl = document.getElementById('resumo-kpis');
+  kpiEl.style.display = 'grid';
+  kpiEl.innerHTML = `
+    <div class="kpi-card ${avgCls}">
+      <div class="kpi-label">CMV Médio Geral</div>
+      <div class="kpi-val">${avgGlobal !== null ? fmt(avgGlobal) + '%' : '—'}</div>
+      <div class="kpi-sub">Meta: ${meta}%</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">CMV Total (R$)</div>
+      <div class="kpi-val">R$ ${fmt(totalRS)}</div>
+      <div class="kpi-sub">Todas as lojas</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Faturamento Total</div>
+      <div class="kpi-val">R$ ${fmt(totalFat)}</div>
+      <div class="kpi-sub">${totalFat > 0 ? 'CMV: ' + fmt(totalRS / totalFat * 100) + '%' : 'Sem dados'}</div>
+    </div>
+    <div class="kpi-card ${totalAlert > 0 ? 'alert' : 'ok'}">
+      <div class="kpi-label">Dias Acima da Meta</div>
+      <div class="kpi-val">${totalAlert}</div>
+      <div class="kpi-sub">de ${totalDias} dias lançados</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Lojas com Dados</div>
+      <div class="kpi-val">${STORES.filter(s => byStore[s].dias > 0).length}</div>
+      <div class="kpi-sub">de ${STORES.length} lojas</div>
+    </div>
+  `;
+
+  // Render tabela
+  const tbody = document.getElementById('resumo-tbody');
+  const tfoot = document.getElementById('resumo-tfoot');
+  tbody.innerHTML = '';
+
+  // Ordenar por CMV% médio desc (lojas sem dados por último)
+  const sorted = [...STORES].sort((a, b) => {
+    const avgA = byStore[a].pctDays > 0 ? byStore[a].sumPct / byStore[a].pctDays : -1;
+    const avgB = byStore[b].pctDays > 0 ? byStore[b].sumPct / byStore[b].pctDays : -1;
+    return avgB - avgA;
+  });
+
+  sorted.forEach(store => {
+    const d   = byStore[store];
+    const avg = d.pctDays > 0 ? d.sumPct / d.pctDays : null;
+    let tag   = '<span class="tag-none">Sem dados</span>';
+    if (avg !== null) {
+      if (avg > meta * 1.1) tag = '<span class="tag-alert">⚠ Acima</span>';
+      else if (avg > meta)  tag = '<span class="tag-warn">~ Atenção</span>';
+      else                  tag = '<span class="tag-ok">✓ OK</span>';
+    }
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="store-name">${store}</td>
+      <td class="num">${d.rs > 0 ? 'R$ ' + fmt(d.rs) : '—'}</td>
+      <td class="num">${d.fat > 0 ? 'R$ ' + fmt(d.fat) : '—'}</td>
+      <td class="num">${avg !== null ? fmt(avg) + '%' : '—'}</td>
+      <td class="num">${d.dias}</td>
+      <td class="num">${d.alertDias > 0 ? '<strong style="color:var(--red-alert)">' + d.alertDias + '</strong>' : d.alertDias}</td>
+      <td>${tag}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  // Totais
+  tfoot.innerHTML = `<tr>
+    <td><strong>TOTAL GERAL</strong></td>
+    <td class="num"><strong>R$ ${fmt(totalRS)}</strong></td>
+    <td class="num"><strong>${totalFat > 0 ? 'R$ ' + fmt(totalFat) : '—'}</strong></td>
+    <td class="num"><strong>${avgGlobal !== null ? fmt(avgGlobal) + '%' : '—'}</strong></td>
+    <td class="num"><strong>${totalDias}</strong></td>
+    <td class="num"><strong>${totalAlert}</strong></td>
+    <td></td>
+  </tr>`;
+
+  document.getElementById('resumo-table-wrap').style.display = '';
+
+  // Ranking visual
+  const rankEl = document.getElementById('rank-list');
+  rankEl.innerHTML = '';
+  const withData = sorted.filter(s => byStore[s].pctDays > 0);
+  const maxPct   = Math.max(...withData.map(s => byStore[s].sumPct / byStore[s].pctDays), meta * 1.2);
+
+  withData.forEach(store => {
+    const avg = byStore[store].sumPct / byStore[store].pctDays;
+    const pct = Math.min((avg / maxPct) * 100, 100);
+    let barCls = avg > meta * 1.1 ? 'alert' : avg > meta ? 'warn' : 'ok';
+    const row = document.createElement('div');
+    row.className = 'rank-row';
+    row.innerHTML = `
+      <div class="rank-name">${store}</div>
+      <div class="rank-bar-wrap">
+        <div class="rank-bar ${barCls}" style="width:${pct}%">
+          <span class="rank-bar-val">R$ ${fmt(byStore[store].rs)}</span>
+        </div>
+      </div>
+      <div class="rank-pct-label">${fmt(avg)}%</div>
+    `;
+    rankEl.appendChild(row);
+  });
+
+  document.getElementById('ranking-section').style.display = withData.length > 0 ? '' : 'none';
+}
+
+// ── MODAL ──
 function openModal(day, existing) {
   activeModalDay = day;
   const date    = new Date(currentYear, currentMonth, day);
@@ -439,10 +817,8 @@ function openModal(day, existing) {
   document.getElementById('modal-fat').value = existing?.faturamento  ?? '';
   document.getElementById('modal-obs').value = existing?.observacoes  ?? '';
   const btn = document.getElementById('modal-save-btn');
-  btn.disabled    = false;
-  btn.textContent = 'Salvar';
+  btn.disabled = false; btn.textContent = 'Salvar';
   document.getElementById('modal-overlay').classList.add('open');
-
   const rsIn  = document.getElementById('modal-rs');
   const fatIn = document.getElementById('modal-fat');
   const pctIn = document.getElementById('modal-pct');
@@ -450,8 +826,7 @@ function openModal(day, existing) {
     const rs = parseFloat(rsIn.value), fat = parseFloat(fatIn.value);
     if (rs > 0 && fat > 0) pctIn.value = ((rs / fat) * 100).toFixed(2);
   }
-  rsIn.oninput  = autoCalc;
-  fatIn.oninput = autoCalc;
+  rsIn.oninput = autoCalc; fatIn.oninput = autoCalc;
 }
 
 function closeModal() {
@@ -461,38 +836,27 @@ function closeModal() {
 
 async function saveDay() {
   if (activeModalDay === null) return;
-  const btn  = document.getElementById('modal-save-btn');
-  btn.disabled    = true;
-  btn.textContent = 'Salvando…';
-
+  const btn = document.getElementById('modal-save-btn');
+  btn.disabled = true; btn.textContent = 'Salvando…';
   const day     = activeModalDay;
   const dateStr = toDateStr(currentYear, currentMonth + 1, day);
   const payload = {
-    loja:        activeStore,
-    data:        dateStr,
+    loja: activeStore, data: dateStr,
     cmv_rs:      parseFloat(document.getElementById('modal-rs').value)  || null,
     cmv_pct:     parseFloat(document.getElementById('modal-pct').value) || null,
     faturamento: parseFloat(document.getElementById('modal-fat').value) || null,
     observacoes: document.getElementById('modal-obs').value.trim() || null
   };
-
   try {
-    // Upsert: insert or update on conflict (loja, data)
-    await sbFetch(TABLE, {
-      method:  'POST',
-      prefer:  'resolution=merge-duplicates,return=minimal',
-      body:    JSON.stringify(payload)
-    });
+    await sbFetch(TABLE, { method: 'POST', prefer: 'resolution=merge-duplicates,return=minimal', body: JSON.stringify(payload) });
     const key = cacheKey(activeStore, currentYear, currentMonth + 1);
     if (!monthCache[key]) monthCache[key] = {};
     monthCache[key][dateStr] = payload;
-    closeModal();
-    buildCalendar();
+    closeModal(); buildCalendar();
     showToast('✓ Dados salvos com sucesso', false);
   } catch(e) {
     showToast('Erro ao salvar: ' + e.message, true);
-    btn.disabled    = false;
-    btn.textContent = 'Salvar';
+    btn.disabled = false; btn.textContent = 'Salvar';
   }
 }
 
@@ -500,50 +864,45 @@ async function deleteDay() {
   if (activeModalDay === null) return;
   const dateStr = toDateStr(currentYear, currentMonth + 1, activeModalDay);
   try {
-    await sbFetch(
-      TABLE + '?loja=eq.' + encodeURIComponent(activeStore) + '&data=eq.' + dateStr,
-      { method: 'DELETE', prefer: 'return=minimal' }
-    );
+    await sbFetch(TABLE + '?loja=eq.' + encodeURIComponent(activeStore) + '&data=eq.' + dateStr, { method: 'DELETE', prefer: 'return=minimal' });
     const key = cacheKey(activeStore, currentYear, currentMonth + 1);
     if (monthCache[key]) delete monthCache[key][dateStr];
-    closeModal();
-    buildCalendar();
+    closeModal(); buildCalendar();
     showToast('Registro excluído', false);
-  } catch(e) {
-    showToast('Erro ao excluir: ' + e.message, true);
-  }
+  } catch(e) { showToast('Erro ao excluir: ' + e.message, true); }
 }
 
+// ── EXPORT CSV ──
 function exportCSV() {
-  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-  let csv = '\uFEFFLoja,Data,CMV R$,CMV %,Faturamento R$,Observações\n';
-  STORES.forEach(store => {
-    const map = monthCache[cacheKey(store, currentYear, currentMonth + 1)] || {};
+  if (activePage === 'resumo') {
+    // Export whatever is rendered in the summary table
+    const rows = document.querySelectorAll('#resumo-tbody tr');
+    if (!rows.length) { showToast('Busque os dados antes de exportar', true); return; }
+    let csv = '\uFEFFLoja,CMV Total R$,Faturamento R$,CMV Médio %,Dias Lançados,Dias Acima Meta\n';
+    rows.forEach(tr => {
+      const cells = tr.querySelectorAll('td');
+      csv += '"' + [0,1,2,3,4,5].map(i => cells[i].textContent.replace(/[R$\s]/g,'').trim()).join('","') + '"\n';
+    });
+    download(csv, 'Luna_CMV_Resumo.csv');
+  } else {
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    let csv = '\uFEFFLoja,Data,CMV R$,CMV %,Faturamento R$,Observações\n';
+    const map = monthCache[cacheKey(activeStore, currentYear, currentMonth + 1)] || {};
     for (let d = 1; d <= daysInMonth; d++) {
       const row = map[toDateStr(currentYear, currentMonth + 1, d)];
-      if (row) {
-        csv += '"' + store + '","' + row.data + '","' +
-               (row.cmv_rs ?? '') + '","' + (row.cmv_pct ?? '') + '","' +
-               (row.faturamento ?? '') + '","' + (row.observacoes ?? '') + '"\n';
-      }
+      if (row) csv += '"' + activeStore + '","' + row.data + '","' + (row.cmv_rs??'') + '","' + (row.cmv_pct??'') + '","' + (row.faturamento??'') + '","' + (row.observacoes??'') + '"\n';
     }
-  });
+    download(csv, 'Luna_CMV_' + MONTHS_PT[currentMonth] + '_' + currentYear + '_' + activeStore + '.csv');
+  }
+}
+function download(csv, filename) {
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
-  a.href = url;
-  a.download = 'Luna_CMV_' + MONTHS_PT[currentMonth] + '_' + currentYear + '.csv';
-  a.click();
-  URL.revokeObjectURL(url);
+  a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url);
 }
 
-function getMeta() { return parseFloat(document.getElementById('cmv-meta-input').value) || 30; }
-function fmt(val) {
-  const n = parseFloat(val);
-  if (isNaN(n)) return '—';
-  return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
+// ── TOAST ──
 let toastTimer;
 function showToast(msg, isError) {
   const t = document.getElementById('toast');
@@ -553,6 +912,7 @@ function showToast(msg, isError) {
   toastTimer = setTimeout(() => { t.className = 'toast'; }, 2800);
 }
 
+// ── EVENTS ──
 document.getElementById('prev-month').onclick = async () => {
   currentMonth--;
   if (currentMonth < 0) { currentMonth = 11; currentYear--; }
@@ -568,17 +928,17 @@ document.getElementById('next-month').onclick = async () => {
 document.getElementById('modal-overlay').addEventListener('click', e => {
   if (e.target === document.getElementById('modal-overlay')) closeModal();
 });
-document.getElementById('cmv-meta-input').addEventListener('change', buildCalendar);
+document.getElementById('cmv-meta-input').addEventListener('change', () => {
+  if (activePage === 'loja') buildCalendar();
+});
 
-// INIT
+// ── INIT ──
 (async () => {
-  buildTabs();
-  await loadMonth(activeStore, currentYear, currentMonth + 1);
-  buildCalendar();
-  // Background-load remaining stores
-  for (const store of STORES) {
-    if (store !== activeStore) loadMonth(store, currentYear, currentMonth + 1).catch(() => {});
-  }
+  initResumoFilters();
+  buildNavTabs();
+  // Start on resumo page, hide month nav
+  document.getElementById('month-nav-block').style.display = 'none';
+  setStatus('ok', 'Conectado ao Supabase');
 })();
 </script>
 </body>
