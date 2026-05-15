@@ -375,26 +375,26 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 // ── TABELA DE CUSTOS (invisível ao usuário) ──
 const SABORES = [
-  {nome:'Pistache',              custo:85.59},
+  {nome:'Banoffe',               custo:36.88},
+  {nome:'Chocolate Belga',       custo:39.31},
+  {nome:'Chocolate Branco',      custo:40.12},
+  {nome:'Chocolate Dubai',       custo:37.49},
+  {nome:'Coco Branco',           custo:39.96},
+  {nome:'Doce de Leite',         custo:37.53},
+  {nome:'Floresta Negra',        custo:39.76},
+  {nome:'Frutas Vermelhas',      custo:34.78},
+  {nome:'Limão',                 custo:23.20},
+  {nome:'Manga',                 custo:27.69},
+  {nome:'Morango (Vegano)',       custo:31.24},
   {nome:'Nocciola Crocante',     custo:51.20},
-  {nome:'Tiramissù',             custo:48.46},
+  {nome:'Pavlova',               custo:39.69},
+  {nome:'Pistache',              custo:85.59},
   {nome:'Rosso Nero',            custo:45.91},
   {nome:'Snickers',              custo:45.20},
   {nome:'Speculoos (Biscoff)',   custo:44.94},
+  {nome:'Tiramissù',             custo:48.46},
   {nome:'Torta de Limão',        custo:44.48},
-  {nome:'Chocolate Branco',      custo:40.12},
-  {nome:'Coco Branco',           custo:39.96},
-  {nome:'Floresta Negra',        custo:39.76},
-  {nome:'Pavlova',               custo:39.69},
   {nome:'Yogurte com Amarena',   custo:39.33},
-  {nome:'Chocolate Belga',       custo:39.31},
-  {nome:'Doce de Leite',         custo:37.53},
-  {nome:'Chocolate Dubai',       custo:37.49},
-  {nome:'Banoffe',               custo:36.88},
-  {nome:'Frutas Vermelhas',      custo:34.78},
-  {nome:'Morango (Vegano)',       custo:31.24},
-  {nome:'Manga',                 custo:27.69},
-  {nome:'Limão',                 custo:23.20},
 ];
 
 const STORES = [
@@ -753,14 +753,17 @@ async function saveDay(){
   const pct=fat&&fat>0?(totalCusto/fat)*100:null;
 
   try{
-    // 1. Upsert CMV
+    // 1. Upsert CMV — tenta atualizar, senão insere
     const cmvPayload={
       loja:activeStore,data:dateStr,
       cmv_rs:totalCusto>0?Math.round(totalCusto*100)/100:null,
       cmv_pct:pct?Math.round(pct*100)/100:null,
       faturamento:fat,observacoes:obs
     };
-    await sbFetch('luna_cmv',{method:'POST',prefer:'resolution=merge-duplicates,return=minimal',body:JSON.stringify(cmvPayload)});
+    // Primeiro tenta DELETE + INSERT para garantir sem conflito
+    await sbFetch('luna_cmv?loja=eq.'+encodeURIComponent(activeStore)+'&data=eq.'+dateStr,
+      {method:'DELETE',prefer:'return=minimal'});
+    await sbFetch('luna_cmv',{method:'POST',prefer:'return=minimal',body:JSON.stringify(cmvPayload)});
 
     // 2. Delete old pesagem for this day/store and re-insert
     await sbFetch('luna_pesagem?loja=eq.'+encodeURIComponent(activeStore)+'&data=eq.'+dateStr,
