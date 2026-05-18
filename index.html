@@ -492,9 +492,29 @@ function getPesDay(store,y,m,d){
   return map[toDateStr(y,m,d)]||[];
 }
 // Get estoque final do dia anterior (para usar como inicial)
-function getEstoqueInicialFromPrev(store,y,m,d){
+async function getEstoqueInicialFromPrev(store,y,m,d){
   let py=y, pm=m, pd=d-1;
   if(pd<1){pm--;if(pm<1){pm=12;py--;}pd=new Date(py,pm,0).getDate();}
+
+  // Verifica se o cache do mês anterior está disponível
+  const key=ckPes(store,py,pm);
+  if(!pesagemCache[key]){
+    // Busca do Supabase
+    const dateStr=toDateStr(py,pm,pd);
+    try{
+      const rows=await sbFetch(
+        'luna_pesagem?loja=eq.'+encodeURIComponent(store)+'&data=eq.'+dateStr+'&select=sabor,estoque_final_kg',
+        {method:'GET'}
+      );
+      const map={};
+      (rows||[]).forEach(r=>{map[r.sabor]=parseFloat(r.estoque_final_kg)||0;});
+      return map;
+    }catch(e){
+      console.warn('Erro ao buscar estoque anterior:',e);
+      return {};
+    }
+  }
+
   const prevRows=getPesDay(store,py,pm,pd);
   const result={};
   prevRows.forEach(r=>{result[r.sabor]=parseFloat(r.estoque_final_kg)||0;});
@@ -623,12 +643,18 @@ function buildSummary(){
 // ── MODAL PESAGEM ──
 let modalPesagemData = {}; // sabor -> {ini, compras, final}
 
-function openModal(day){
+async function openModal(day){
   activeModalDay=day;
   const date=new Date(currentYear,currentMonth,day);
   const wd=['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'][date.getDay()];
   document.getElementById('modal-title').textContent=pad(day)+' de '+MONTHS_PT[currentMonth]+' '+currentYear;
   document.getElementById('modal-sub').textContent=activeStore+' · '+wd;
+
+  // Mostra modal imediatamente
+  document.getElementById('modal-overlay').classList.add('open');
+  document.getElementById('modal-save-btn').disabled=true;
+  document.getElementById('modal-save-btn').textContent='Carregando…';
+  document.getElementById('btn-inconformidade').style.display='none';
 
   // Load existing CMV
   const cmvData=getCmvDay(activeStore,currentYear,currentMonth+1,day);
@@ -640,8 +666,8 @@ function openModal(day){
   const pesMap={};
   pesRows.forEach(r=>{pesMap[r.sabor]={ini:r.estoque_inicial_kg,compras:r.compras_kg,fin:r.estoque_final_kg};});
 
-  // Load prev day estoque final as initial stock
-  const prevEstoque=getEstoqueInicialFromPrev(activeStore,currentYear,currentMonth+1,day);
+  // Busca estoque final do dia anterior (vai ao Supabase se necessário)
+  const prevEstoque=await getEstoqueInicialFromPrev(activeStore,currentYear,currentMonth+1,day);
 
   // Build table
   const tbody=document.getElementById('pesagem-tbody');
@@ -679,7 +705,6 @@ function openModal(day){
   updateInconformidadeBtn();
   document.getElementById('modal-save-btn').disabled=false;
   document.getElementById('modal-save-btn').textContent='Salvar';
-  document.getElementById('modal-overlay').classList.add('open');
 }
 
 function idx(nome){return nome.replace(/[^a-z0-9]/gi,'_');}
