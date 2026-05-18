@@ -997,10 +997,10 @@ function gerarRelatorioInconformidade(){
   SABORES.forEach(s=>{
     const compras=modalPesagemData[s.nome]?.compras||0;
     if(compras<=0)return;
-    // múltiplo de 6 imediatamente acima
-    const multiplo=Math.ceil(compras/CAIXA_KG)*CAIXA_KG;
+    // múltiplo de 6 mais próximo
+    const multiplo=Math.round(compras/CAIXA_KG)*CAIXA_KG||CAIXA_KG;
     const diffKg=multiplo-compras;
-    if(diffKg>0.001){// só lista se houver diferença real
+    if(diffKg>0.001){ // só inconformidade se recebeu MENOS que o esperado
       const diffVal=diffKg*s.custo;
       inconf.push({sabor:s.nome,compras,multiplo,diffKg,custo:s.custo,diffVal});
     }
@@ -1087,8 +1087,10 @@ function gerarRelatorioInconformidade(){
 
   <div class="nota">
     <strong>Critério:</strong> As entregas são realizadas em caixas de <strong>6 kg</strong>. 
-    Este relatório identifica sabores cuja quantidade recebida é inferior ao múltiplo de 6 kg imediatamente acima,
-    indicando possível entrega incompleta. A diferença em R$ é calculada com base no custo unitário de cada sabor.
+    Este relatório identifica sabores cuja quantidade recebida é inferior ao múltiplo de 6 kg mais próximo,
+    indicando entrega incompleta em relação ao número de caixas esperado. 
+    Recebimentos acima do múltiplo mais próximo (ex: 6,2 kg em 1 caixa) não são considerados inconformidade.
+    A diferença em R$ é calculada com base no custo unitário de cada sabor.
   </div>
 
   <div class="section-title">Detalhamento por Sabor</div>
