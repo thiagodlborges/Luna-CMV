@@ -491,34 +491,27 @@ function getPesDay(store,y,m,d){
   const map=pesagemCache[ckPes(store,y,m)]||{};
   return map[toDateStr(y,m,d)]||[];
 }
-// Get estoque final do dia anterior (para usar como inicial)
+// Get estoque final do dia anterior — busca sempre direto do Supabase para garantir precisão
 async function getEstoqueInicialFromPrev(store,y,m,d){
   let py=y, pm=m, pd=d-1;
   if(pd<1){pm--;if(pm<1){pm=12;py--;}pd=new Date(py,pm,0).getDate();}
 
-  // Verifica se o cache do mês anterior está disponível
-  const key=ckPes(store,py,pm);
-  if(!pesagemCache[key]){
-    // Busca do Supabase
-    const dateStr=toDateStr(py,pm,pd);
-    try{
-      const rows=await sbFetch(
-        'luna_pesagem?loja=eq.'+encodeURIComponent(store)+'&data=eq.'+dateStr+'&select=sabor,estoque_final_kg',
-        {method:'GET'}
-      );
-      const map={};
-      (rows||[]).forEach(r=>{map[r.sabor]=parseFloat(r.estoque_final_kg)||0;});
-      return map;
-    }catch(e){
-      console.warn('Erro ao buscar estoque anterior:',e);
-      return {};
-    }
+  const dateStr=toDateStr(py,pm,pd);
+  try{
+    const rows=await sbFetch(
+      'luna_pesagem?loja=eq.'+encodeURIComponent(store)+'&data=eq.'+dateStr+'&select=sabor,estoque_final_kg',
+      {method:'GET'}
+    );
+    const map={};
+    (rows||[]).forEach(r=>{
+      const v=parseFloat(r.estoque_final_kg);
+      if(!isNaN(v)&&v>0) map[r.sabor]=v;
+    });
+    return map;
+  }catch(e){
+    console.warn('Erro ao buscar estoque anterior:',e);
+    return {};
   }
-
-  const prevRows=getPesDay(store,py,pm,pd);
-  const result={};
-  prevRows.forEach(r=>{result[r.sabor]=parseFloat(r.estoque_final_kg)||0;});
-  return result;
 }
 
 // ── NAV ──
