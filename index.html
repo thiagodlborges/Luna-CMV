@@ -680,11 +680,11 @@ async function openModal(day){
     tr.innerHTML=`
       <td class="sabor-name">${s.nome}</td>
       <td class="num"><span class="est-ini-val" id="ini_${idx(s.nome)}">${fmt(ini,3)}</span></td>
-      <td class="num"><input class="kg-input" type="number" min="0" step="0.001" placeholder="0.000"
-           id="comp_${idx(s.nome)}" value="${comp>0?comp:''}"
+      <td class="num"><input class="kg-input" type="text" inputmode="decimal" placeholder="0,000"
+           id="comp_${idx(s.nome)}" value="${comp>0?String(comp).replace('.',','):''}"
            oninput="onPesagemChange('${s.nome}')"></td>
-      <td class="num"><input class="kg-input" type="number" min="0" step="0.001" placeholder="0.000"
-           id="fin_${idx(s.nome)}" value="${fin>0?fin:''}"
+      <td class="num"><input class="kg-input" type="text" inputmode="decimal" placeholder="0,000"
+           id="fin_${idx(s.nome)}" value="${fin>0?String(fin).replace('.',','):''}"
            oninput="onPesagemChange('${s.nome}')"></td>
       <td class="num consumo-val" id="cons_${idx(s.nome)}" style="display:none;">—</td>
       <td class="num custo-val"   id="cust_${idx(s.nome)}" style="display:none;">—</td>
@@ -702,12 +702,17 @@ async function openModal(day){
 
 function idx(nome){return nome.replace(/[^a-z0-9]/gi,'_');}
 
+// Parse kg input — aceita tanto vírgula quanto ponto como separador decimal
+function parseKg(val){
+  if(val===null||val===undefined||val==='')return 0;
+  return parseFloat(String(val).replace(',','.').trim())||0;
+}
+
 function onPesagemChange(nome){
-  const s=SABORES.find(x=>x.nome===nome);
   const compEl=document.getElementById('comp_'+idx(nome));
   const finEl =document.getElementById('fin_'+idx(nome));
-  const comp=parseFloat(compEl.value)||0;
-  const fin =parseFloat(finEl.value)||0;
+  const comp=parseKg(compEl.value);
+  const fin =parseKg(finEl.value);
   const ini=modalPesagemData[nome]?.ini||0;
   modalPesagemData[nome]={ini,compras:comp,fin};
   calcRow(nome);
