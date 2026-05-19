@@ -819,7 +819,24 @@ async function saveDay(){
       await sbFetch('luna_pesagem',{method:'POST',prefer:'return=minimal',body:JSON.stringify(pesRows)});
     }
 
-    // Update cache
+    // 3. Propagar estoque_final para o estoque_inicial do dia seguinte (se existir)
+    // O trigger no banco já faz isso automaticamente via fn_cascade_estoque_final,
+    // mas precisamos também invalidar o cache do dia seguinte para refletir na UI
+    let nd=day+1, nm=currentMonth+1, ny=currentYear;
+    if(nd>new Date(ny,nm,0).getDate()){nd=1;nm++;if(nm>12){nm=1;ny++;}}
+    const nextDateStr=toDateStr(ny,nm,nd);
+    const ckPNext=ckPes(activeStore,ny,nm);
+    if(pesagemCache[ckPNext]&&pesagemCache[ckPNext][nextDateStr]){
+      // Atualiza cache local com os novos estoques iniciais
+      SABORES.forEach(s=>{
+        const fin=(modalPesagemData[s.nome]||{}).fin||0;
+        const nextRows=pesagemCache[ckPNext][nextDateStr];
+        const nextRow=nextRows.find(r=>r.sabor===s.nome);
+        if(nextRow) nextRow.estoque_inicial_kg=fin;
+      });
+    }
+
+    // Update cache do dia atual
     const ckC=ckCmv(activeStore,currentYear,currentMonth+1);
     if(!cmvCache[ckC])cmvCache[ckC]={};
     cmvCache[ckC][dateStr]=cmvPayload;
