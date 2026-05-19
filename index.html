@@ -802,11 +802,11 @@ async function saveDay(){
       .map(s=>{
         const d=modalPesagemData[s.nome]||{ini:0,compras:0,fin:0};
         return {
-          loja:activeStore,data:dateStr,sabor:s.nome,
-          estoque_inicial_kg:d.ini||0,
-          compras_kg:d.compras||0,
-          estoque_final_kg:d.fin||0,
-          custo_unitario:s.custo
+          loja:activeStore, data:dateStr, sabor:s.nome,
+          estoque_inicial_kg: d.ini || 0,
+          compras_kg:         d.compras || 0,
+          estoque_final_kg:   d.fin || 0,
+          custo_unitario:     s.custo
         };
       });
 
