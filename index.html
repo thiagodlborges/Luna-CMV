@@ -418,6 +418,7 @@ let activePage   = 'resumo';
 let cmvCache     = {};   // store_Y_M -> { dateStr: row }
 let pesagemCache = {};   // store_Y_M -> { dateStr: [rows] }
 let activeModalDay = null;
+let activeModalDateStr = null; // data completa YYYY-MM-DD armazenada na abertura do modal
 
 // ── SUPABASE ──
 async function sbFetch(path, opts={}) {
@@ -638,6 +639,7 @@ let modalPesagemData = {}; // sabor -> {ini, compras, final}
 
 async function openModal(day){
   activeModalDay=day;
+  activeModalDateStr=toDateStr(currentYear,currentMonth+1,day);
   const date=new Date(currentYear,currentMonth,day);
   const wd=['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'][date.getDay()];
   document.getElementById('modal-title').textContent=pad(day)+' de '+MONTHS_PT[currentMonth]+' '+currentYear;
@@ -761,6 +763,7 @@ function recalcAll(){
 function closeModal(){
   document.getElementById('modal-overlay').classList.remove('open');
   activeModalDay=null;
+  activeModalDateStr=null;
 }
 
 async function saveDay(){
@@ -769,7 +772,7 @@ async function saveDay(){
   btn.disabled=true;btn.textContent='Salvando…';
 
   const day=activeModalDay;
-  const dateStr=toDateStr(currentYear,currentMonth+1,day);
+  const dateStr=activeModalDateStr; // data exata capturada na abertura do modal
   const fat=parseFloat(document.getElementById('modal-fat').value)||null;
   const obs=document.getElementById('modal-obs').value.trim()||null;
 
@@ -819,11 +822,10 @@ async function saveDay(){
       await sbFetch('luna_pesagem',{method:'POST',prefer:'return=minimal',body:JSON.stringify(pesRows)});
     }
 
-    // 3. Propagar estoque_final para o estoque_inicial do dia seguinte (se existir)
-    // O trigger no banco já faz isso automaticamente via fn_cascade_estoque_final,
-    // mas precisamos também invalidar o cache do dia seguinte para refletir na UI
-    let nd=day+1, nm=currentMonth+1, ny=currentYear;
-    if(nd>new Date(ny,nm,0).getDate()){nd=1;nm++;if(nm>12){nm=1;ny++;}}
+    // 3. Propagar estoque_final para estoque_inicial do dia seguinte (cache local)
+    const modalDate=new Date(dateStr+'T12:00:00');
+    const nextDate=new Date(modalDate); nextDate.setDate(nextDate.getDate()+1);
+    const ny=nextDate.getFullYear(), nm=nextDate.getMonth()+1, nd=nextDate.getDate();
     const nextDateStr=toDateStr(ny,nm,nd);
     const ckPNext=ckPes(activeStore,ny,nm);
     if(pesagemCache[ckPNext]&&pesagemCache[ckPNext][nextDateStr]){
