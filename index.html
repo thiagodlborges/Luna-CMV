@@ -34,6 +34,8 @@
   #cmv-meta-input:focus{border-color:var(--sand);}
   .export-btn{display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.10);border:1px solid rgba(212,196,168,.28);color:var(--sand);border-radius:7px;padding:6px 13px;font-family:'Jost',sans-serif;font-size:.73rem;letter-spacing:.07em;cursor:pointer;transition:background .2s;white-space:nowrap;}
   .export-btn:hover{background:rgba(255,255,255,.2);}
+  .inv-btn{background:rgba(74,124,89,.25);border-color:rgba(74,124,89,.5);color:#B8DDBC;}
+  .inv-btn:hover{background:rgba(74,124,89,.4);}
 
   /* NAV TABS */
   .nav-tabs-wrapper{background:var(--bordo);border-bottom:2px solid var(--bordo-dark);overflow-x:auto;scrollbar-width:thin;scrollbar-color:var(--bordo-light) transparent;}
@@ -223,6 +225,7 @@
         <button id="next-month">&#8594;</button>
       </div>
       <button class="export-btn" onclick="exportCSV()">&#8595; Exportar CSV</button>
+      <button class="export-btn inv-btn" onclick="exportarInventario()" title="Inventário geral de estoque em Excel">&#128202; Inventário Excel</button>
     </div>
   </div>
 </header>
@@ -1176,6 +1179,156 @@ function gerarRelatorioInconformidade(){
   setTimeout(()=>URL.revokeObjectURL(url),10000);
 }
 
+// ── INVENTÁRIO EXCEL ──
+async function exportarInventario(){
+  const btn=document.querySelector('.inv-btn');
+  btn.textContent='⏳ Gerando…';btn.disabled=true;
+  setStatus('loading','Buscando estoque mais recente de todas as lojas…');
+
+  try{
+    // Para cada loja, busca a pesagem do dia mais recente disponível
+    const hoje=new Date();
+    const dataRef=toDateStr(hoje.getFullYear(),hoje.getMonth()+1,hoje.getDate());
+
+    // Busca última pesagem de cada loja/sabor (o registro com a data mais recente até hoje)
+    const rows=await sbFetch(
+      'luna_pesagem?data=lte.'+dataRef+'&select=loja,data,sabor,estoque_final_kg,custo_unitario&order=loja,sabor,data.desc',
+      {method:'GET'}
+    );
+
+    // Para cada loja+sabor, pega só o registro mais recente
+    const latest={};
+    (rows||[]).forEach(r=>{
+      const k=r.loja+'|||'+r.sabor;
+      if(!latest[k]) latest[k]=r; // já vem ordenado desc por data
+    });
+
+    // Monta estrutura: sabor -> loja -> {kg, valor, data}
+    const custoMap={};
+    SABORES.forEach(s=>{custoMap[s.nome]=s.custo;});
+
+    // ── ABA 1: RESUMO POR LOJA ──
+    // Linhas: sabores; Colunas: lojas
+    const abaResumoKg=[['Sabor / Loja',...STORES,'TOTAL KG','TOTAL R$']];
+    const abaResumoVal=[['Sabor / Loja',...STORES,'TOTAL KG','TOTAL R$']];
+
+    let totalGeralKg=0, totalGeralVal=0;
+    const totalPorLoja={};STORES.forEach(s=>{totalPorLoja[s]={kg:0,val:0};});
+
+    SABORES.forEach(s=>{
+      const rowKg=[s.nome];
+      const rowVal=[s.nome];
+      let somaKg=0, somaVal=0;
+      STORES.forEach(loja=>{
+        const k=loja+'|||'+s.nome;
+        const rec=latest[k];
+        const kg=rec?parseFloat(rec.estoque_final_kg)||0:0;
+        const val=kg*s.custo;
+        rowKg.push(kg);
+        rowVal.push(val);
+        somaKg+=kg; somaVal+=val;
+        totalPorLoja[loja].kg+=kg;
+        totalPorLoja[loja].val+=val;
+      });
+      rowKg.push(somaKg,somaVal);
+      rowVal.push(somaKg,somaVal);
+      totalGeralKg+=somaKg; totalGeralVal+=somaVal;
+      abaResumoKg.push(rowKg);
+      abaResumoVal.push(rowVal);
+    });
+
+    // Linha de totais
+    const totKgRow=['TOTAL'];
+    const totValRow=['TOTAL'];
+    STORES.forEach(loja=>{totKgRow.push(totalPorLoja[loja].kg); totValRow.push(totalPorLoja[loja].val);});
+    totKgRow.push(totalGeralKg,totalGeralVal);
+    totValRow.push(totalGeralKg,totalGeralVal);
+    abaResumoKg.push(totKgRow);
+    abaResumoVal.push(totValRow);
+
+    // ── ABA 2: DETALHE POR LOJA (data do último registro) ──
+    const abaDetalhe=[['Loja','Data Referência','Sabor','Estoque Final (kg)','Custo/kg (R$)','Valor em Estoque (R$)']];
+    STORES.forEach(loja=>{
+      SABORES.forEach(s=>{
+        const k=loja+'|||'+s.nome;
+        const rec=latest[k];
+        const kg=rec?parseFloat(rec.estoque_final_kg)||0:0;
+        const data=rec?rec.data:'—';
+        const val=kg*s.custo;
+        if(kg>0){
+          abaDetalhe.push([loja,data,s.nome,kg,s.custo,val]);
+        }
+      });
+    });
+
+    // ── GERAR WORKBOOK ──
+    if(typeof XLSX==='undefined'){
+      showToast('Aguarde, carregando biblioteca…',false);
+      await loadSheetJS();
+    }
+
+    const wb=XLSX.utils.book_new();
+
+    // Aba Estoque em KG
+    const wsKg=XLSX.utils.aoa_to_sheet(abaResumoKg);
+    estilizarWS(wsKg, abaResumoKg, 'kg');
+    XLSX.utils.book_append_sheet(wb,wsKg,'Estoque em KG');
+
+    // Aba Estoque em Valor
+    const wsVal=XLSX.utils.aoa_to_sheet(abaResumoVal);
+    estilizarWS(wsVal, abaResumoVal, 'val');
+    XLSX.utils.book_append_sheet(wb,wsVal,'Estoque em Valor (R$)');
+
+    // Aba Detalhe
+    const wsDet=XLSX.utils.aoa_to_sheet(abaDetalhe);
+    XLSX.utils.book_append_sheet(wb,wsDet,'Detalhe por Loja');
+
+    // Download
+    const dataHoje=hoje.toLocaleDateString('pt-BR').replace(/\//g,'-');
+    XLSX.writeFile(wb,`Luna_Inventario_${dataHoje}.xlsx`);
+
+    setStatus('ok','Inventário exportado · '+new Date().toLocaleTimeString('pt-BR'));
+    showToast('✓ Inventário gerado com sucesso',false);
+  }catch(e){
+    setStatus('error','Erro: '+e.message);
+    showToast('Erro ao gerar inventário: '+e.message,true);
+  }
+  btn.textContent='📊 Inventário Excel';btn.disabled=false;
+}
+
+function estilizarWS(ws, data, tipo){
+  // Largura das colunas
+  const cols=[{wch:22}]; // sabor
+  STORES.forEach(()=>cols.push({wch:14}));
+  cols.push({wch:12},{wch:14});
+  ws['!cols']=cols;
+
+  // Formatar células numéricas
+  const nRows=data.length, nCols=data[0].length;
+  for(let r=1;r<nRows;r++){
+    for(let c=1;c<nCols;c++){
+      const addr=XLSX.utils.encode_cell({r,c});
+      if(ws[addr]&&typeof ws[addr].v==='number'){
+        ws[addr].t='n';
+        if(tipo==='val'||c===nCols-1){
+          ws[addr].z='"R$ "#,##0.00';
+        }else{
+          ws[addr].z='#,##0.000';
+        }
+      }
+    }
+  }
+}
+
+function loadSheetJS(){
+  return new Promise((res,rej)=>{
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload=res; s.onerror=rej;
+    document.head.appendChild(s);
+  });
+}
+
 // ── EVENTS ──
 document.getElementById('prev-month').onclick=async()=>{
   currentMonth--;if(currentMonth<0){currentMonth=11;currentYear--;}
@@ -1198,6 +1351,8 @@ document.getElementById('cmv-meta-input').addEventListener('change',()=>{
   buildNavTabs();
   document.getElementById('month-nav-block').style.display='none';
   setStatus('ok','Conectado ao Supabase');
+  // Pré-carrega SheetJS em background
+  loadSheetJS().catch(()=>{});
 })();
 </script>
 </body>
