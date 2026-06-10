@@ -225,7 +225,7 @@
         <button id="next-month">&#8594;</button>
       </div>
       <button class="export-btn" onclick="exportCSV()">&#8595; Exportar CSV</button>
-      <button class="export-btn inv-btn" onclick="exportarInventario()" title="Inventário geral de estoque em Excel">&#128202; Inventário Excel</button>
+      <button class="export-btn inv-btn" onclick="abrirModalInventario()" title="Inventário geral de estoque em Excel">&#128202; Inventário Excel</button>
     </div>
   </div>
 </header>
@@ -373,6 +373,24 @@
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- MODAL INVENTÁRIO — seleção de data -->
+<div class="modal-overlay" id="inv-modal-overlay">
+  <div class="modal" style="max-width:380px;">
+    <button class="modal-close" onclick="fecharModalInventario()">✕</button>
+    <h3>Inventário de Estoque</h3>
+    <div class="modal-sub">Selecione a data de referência</div>
+    <div class="modal-field">
+      <label>Data do Inventário</label>
+      <input type="date" id="inv-data-input" style="width:100%;border:1px solid var(--cream-dark);border-radius:8px;padding:9px 12px;font-family:'Jost',sans-serif;font-size:.9rem;color:var(--text-dark);background:var(--cream);outline:none;">
+      <div class="modal-note">O sistema usará o último registro disponível até essa data para cada sabor e loja.</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="fecharModalInventario()">Cancelar</button>
+      <button class="btn-primary" onclick="confirmarInventario()">&#128202; Gerar Excel</button>
+    </div>
+  </div>
+</div>
 <footer>Luna Gelato & Caffè &nbsp;·&nbsp; Painel de Controle CMV &nbsp;·&nbsp; Dados sincronizados via Supabase</footer>
 
 <script>
@@ -1180,17 +1198,29 @@ function gerarRelatorioInconformidade(){
 }
 
 // ── INVENTÁRIO EXCEL ──
-async function exportarInventario(){
+function abrirModalInventario(){
+  // Preenche com data de hoje por padrão
+  const hoje=new Date();
+  document.getElementById('inv-data-input').value=toDateStr(hoje.getFullYear(),hoje.getMonth()+1,hoje.getDate());
+  document.getElementById('inv-modal-overlay').classList.add('open');
+}
+function fecharModalInventario(){
+  document.getElementById('inv-modal-overlay').classList.remove('open');
+}
+function confirmarInventario(){
+  const data=document.getElementById('inv-data-input').value;
+  if(!data){showToast('Selecione uma data',true);return;}
+  fecharModalInventario();
+  exportarInventario(data);
+}
+
+async function exportarInventario(dataRef){
   const btn=document.querySelector('.inv-btn');
   btn.textContent='⏳ Gerando…';btn.disabled=true;
-  setStatus('loading','Buscando estoque mais recente de todas as lojas…');
+  setStatus('loading','Buscando estoque de '+dataRef+' para todas as lojas…');
 
   try{
-    // Para cada loja, busca a pesagem do dia mais recente disponível
-    const hoje=new Date();
-    const dataRef=toDateStr(hoje.getFullYear(),hoje.getMonth()+1,hoje.getDate());
-
-    // Busca última pesagem de cada loja/sabor (o registro com a data mais recente até hoje)
+    // Busca última pesagem de cada loja/sabor até a data selecionada
     const rows=await sbFetch(
       'luna_pesagem?data=lte.'+dataRef+'&select=loja,data,sabor,estoque_final_kg,custo_unitario&order=loja,sabor,data.desc',
       {method:'GET'}
@@ -1284,8 +1314,8 @@ async function exportarInventario(){
     XLSX.utils.book_append_sheet(wb,wsDet,'Detalhe por Loja');
 
     // Download
-    const dataHoje=hoje.toLocaleDateString('pt-BR').replace(/\//g,'-');
-    XLSX.writeFile(wb,`Luna_Inventario_${dataHoje}.xlsx`);
+    const dataFmt=dataRef.split('-').reverse().join('-');
+    XLSX.writeFile(wb,`Luna_Inventario_${dataFmt}.xlsx`);
 
     setStatus('ok','Inventário exportado · '+new Date().toLocaleTimeString('pt-BR'));
     showToast('✓ Inventário gerado com sucesso',false);
@@ -1340,6 +1370,9 @@ document.getElementById('next-month').onclick=async()=>{
 };
 document.getElementById('modal-overlay').addEventListener('click',e=>{
   if(e.target===document.getElementById('modal-overlay'))closeModal();
+});
+document.getElementById('inv-modal-overlay').addEventListener('click',e=>{
+  if(e.target===document.getElementById('inv-modal-overlay'))fecharModalInventario();
 });
 document.getElementById('cmv-meta-input').addEventListener('change',()=>{
   if(activePage==='loja')buildCalendar();
