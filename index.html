@@ -1220,29 +1220,21 @@ async function exportarInventario(dataRef){
   setStatus('loading','Buscando estoque de '+dataRef+' para todas as lojas…');
 
   try{
-    // Busca o último estoque_final de cada loja+sabor até a data selecionada
-    // Faz uma requisição por loja para evitar o limite de 1000 linhas da API
-    const todasLinhas=[];
-    for(const loja of STORES){
-      const rows=await sbFetch(
-        'luna_pesagem?loja=eq.'+encodeURIComponent(loja)+
-        '&data=lte.'+dataRef+
-        '&select=loja,data,sabor,estoque_final_kg,custo_unitario'+
-        '&order=sabor,data.desc',
-        {method:'GET', headers:{'Range-Unit':'items','Range':'0-999'}}
-      );
-      // Para cada sabor, pega só o registro mais recente (primeiro da lista desc)
-      const visto=new Set();
-      (rows||[]).forEach(r=>{
-        if(!visto.has(r.sabor)){visto.add(r.sabor);todasLinhas.push(r);}
-      });
-    }
+    // Chama função RPC que retorna o último estoque de cada loja+sabor até a data — sem limite de linhas
+    const todasLinhas = await sbFetch(
+      'rpc/fn_inventario',
+      {
+        method: 'POST',
+        prefer: 'return=representation',
+        body: JSON.stringify({ p_data: dataRef })
+      }
+    );
 
-    // Monta mapa loja+sabor -> registro mais recente (já vem 1 por loja+sabor)
+    // Monta mapa loja+sabor -> registro
     const latest={};
-    todasLinhas.forEach(r=>{
+    (todasLinhas||[]).forEach(r=>{
       const k=r.loja+'|||'+r.sabor;
-      if(!latest[k]) latest[k]=r;
+      latest[k]=r;
     });
 
     // Monta estrutura: sabor -> loja -> {kg, valor, data}
