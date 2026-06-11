@@ -1220,15 +1220,20 @@ async function exportarInventario(dataRef){
   setStatus('loading','Buscando estoque de '+dataRef+' para todas as lojas…');
 
   try{
-    // Chama função RPC que retorna o último estoque de cada loja+sabor até a data — sem limite de linhas
-    const todasLinhas = await sbFetch(
-      'rpc/fn_inventario',
-      {
-        method: 'POST',
-        prefer: 'return=representation',
-        body: JSON.stringify({ p_data: dataRef })
-      }
-    );
+    // Chama função RPC diretamente para buscar último estoque por loja+sabor até a data
+    const rpcRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/fn_inventario`, {
+      method: 'POST',
+      mode: 'cors',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_KEY,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({ p_data: dataRef })
+    });
+    if(!rpcRes.ok) throw new Error(await rpcRes.text());
+    const todasLinhas = await rpcRes.json();
 
     // Monta mapa loja+sabor -> registro
     const latest={};
