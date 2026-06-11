@@ -1220,17 +1220,29 @@ async function exportarInventario(dataRef){
   setStatus('loading','Buscando estoque de '+dataRef+' para todas as lojas…');
 
   try{
-    // Busca última pesagem de cada loja/sabor até a data selecionada
-    const rows=await sbFetch(
-      'luna_pesagem?data=lte.'+dataRef+'&select=loja,data,sabor,estoque_final_kg,custo_unitario&order=loja,sabor,data.desc',
-      {method:'GET'}
-    );
+    // Busca o último estoque_final de cada loja+sabor até a data selecionada
+    // Faz uma requisição por loja para evitar o limite de 1000 linhas da API
+    const todasLinhas=[];
+    for(const loja of STORES){
+      const rows=await sbFetch(
+        'luna_pesagem?loja=eq.'+encodeURIComponent(loja)+
+        '&data=lte.'+dataRef+
+        '&select=loja,data,sabor,estoque_final_kg,custo_unitario'+
+        '&order=sabor,data.desc',
+        {method:'GET', headers:{'Range-Unit':'items','Range':'0-999'}}
+      );
+      // Para cada sabor, pega só o registro mais recente (primeiro da lista desc)
+      const visto=new Set();
+      (rows||[]).forEach(r=>{
+        if(!visto.has(r.sabor)){visto.add(r.sabor);todasLinhas.push(r);}
+      });
+    }
 
-    // Para cada loja+sabor, pega só o registro mais recente
+    // Monta mapa loja+sabor -> registro mais recente (já vem 1 por loja+sabor)
     const latest={};
-    (rows||[]).forEach(r=>{
+    todasLinhas.forEach(r=>{
       const k=r.loja+'|||'+r.sabor;
-      if(!latest[k]) latest[k]=r; // já vem ordenado desc por data
+      if(!latest[k]) latest[k]=r;
     });
 
     // Monta estrutura: sabor -> loja -> {kg, valor, data}
