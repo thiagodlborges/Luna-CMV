@@ -205,6 +205,7 @@
 </head>
 <body>
 
+<div id="appRoot" style="display:none">
 <header>
   <div class="header-inner">
     <div class="logo-area">
@@ -215,6 +216,7 @@
       <span class="header-title">Painel de CMV</span>
     </div>
     <div class="header-right">
+      <a href="https://thiagodlborges.github.io/sistema-luna/" style="color:#D4C4A8;font-size:.78rem;text-decoration:none;opacity:.9;margin-right:6px">← Sistema Luna</a>
       <div class="meta-area">
         <label>Meta CMV</label>
         <input type="number" id="cmv-meta-input" value="32" min="1" max="100" step="0.5"> %
@@ -226,6 +228,7 @@
       </div>
       <button class="export-btn" onclick="exportCSV()">&#8595; Exportar CSV</button>
       <button class="export-btn inv-btn" onclick="abrirModalInventario()" title="Inventário geral de estoque em Excel">&#128202; Inventário Excel</button>
+      <button class="export-btn" onclick="sairApp()" title="Sair">Sair</button>
     </div>
   </div>
 </header>
@@ -392,7 +395,9 @@
   </div>
 </div>
 <footer>Luna Gelato & Caffè &nbsp;·&nbsp; Painel de Controle CMV &nbsp;·&nbsp; Dados sincronizados via Supabase</footer>
+</div><!-- /appRoot -->
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 // ── CONFIG ──
 const SUPABASE_URL = 'https://pbuhwpcpdcnaheaywmdv.supabase.co';
@@ -442,12 +447,37 @@ let activeModalDay = null;
 let activeModalDateStr = null; // data completa YYYY-MM-DD armazenada na abertura do modal
 
 // ── SUPABASE ──
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const PORTAL_URL = 'https://thiagodlborges.github.io/sistema-luna/';
+let userToken = null;
+
+async function sairApp(){
+  await sb.auth.signOut();
+  window.location.href = PORTAL_URL;
+}
+
+async function verificarAcessoEIniciar(){
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = PORTAL_URL; return; }
+
+  const { data: ok, error } = await sb.rpc('tem_acesso', { p_slug: 'cmv' });
+  if (error || !ok) {
+    await sb.auth.signOut();
+    window.location.href = PORTAL_URL;
+    return;
+  }
+
+  userToken = session.access_token;
+  document.getElementById('appRoot').style.display = 'block';
+  initApp();
+}
+
 async function sbFetch(path, opts={}) {
   const {prefer, headers:eh, ...rest} = opts;
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     mode:'cors',
     headers:{
-      'apikey':SUPABASE_KEY,'Authorization':'Bearer '+SUPABASE_KEY,
+      'apikey':SUPABASE_KEY,'Authorization':'Bearer '+userToken,
       'Content-Type':'application/json','Accept':'application/json',
       ...(prefer?{'Prefer':prefer}:{}), ...(eh||{})
     }, ...rest
@@ -1226,7 +1256,7 @@ async function exportarInventario(dataRef){
       mode: 'cors',
       headers: {
         'apikey': SUPABASE_KEY,
-        'Authorization': 'Bearer ' + SUPABASE_KEY,
+        'Authorization': 'Bearer ' + userToken,
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         'Range-Unit': 'items',
@@ -1400,14 +1430,16 @@ document.getElementById('cmv-meta-input').addEventListener('change',()=>{
 });
 
 // ── INIT ──
-(async()=>{
+function initApp(){
   initResumoFilters();
   buildNavTabs();
   document.getElementById('month-nav-block').style.display='none';
   setStatus('ok','Conectado ao Supabase');
   // Pré-carrega SheetJS em background
   loadSheetJS().catch(()=>{});
-})();
+}
+
+verificarAcessoEIniciar();
 </script>
 </body>
 </html>
