@@ -449,7 +449,6 @@ let activeModalDateStr = null; // data completa YYYY-MM-DD armazenada na abertur
 // ── SUPABASE ──
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 const PORTAL_URL = 'https://thiagodlborges.github.io/sistema-luna/';
-let userToken = null;
 
 async function sairApp(){
   await sb.auth.signOut();
@@ -467,17 +466,19 @@ async function verificarAcessoEIniciar(){
     return;
   }
 
-  userToken = session.access_token;
   document.getElementById('appRoot').style.display = 'block';
   initApp();
 }
 
 async function sbFetch(path, opts={}) {
+  // Busca a sessão atual a cada chamada (supabase-js já renova sozinho se estiver perto de expirar)
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = PORTAL_URL; return null; }
   const {prefer, headers:eh, ...rest} = opts;
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     mode:'cors',
     headers:{
-      'apikey':SUPABASE_KEY,'Authorization':'Bearer '+userToken,
+      'apikey':SUPABASE_KEY,'Authorization':'Bearer '+session.access_token,
       'Content-Type':'application/json','Accept':'application/json',
       ...(prefer?{'Prefer':prefer}:{}), ...(eh||{})
     }, ...rest
@@ -1250,13 +1251,15 @@ async function exportarInventario(dataRef){
   setStatus('loading','Buscando estoque de '+dataRef+' para todas as lojas…');
 
   try{
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) { window.location.href = PORTAL_URL; return; }
     // Chama função RPC com header Range para garantir todos os registros sem limite
     const rpcRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/fn_inventario`, {
       method: 'POST',
       mode: 'cors',
       headers: {
         'apikey': SUPABASE_KEY,
-        'Authorization': 'Bearer ' + userToken,
+        'Authorization': 'Bearer ' + session.access_token,
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         'Range-Unit': 'items',
