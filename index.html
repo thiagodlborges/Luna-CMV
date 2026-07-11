@@ -404,28 +404,36 @@ const SUPABASE_URL = 'https://pbuhwpcpdcnaheaywmdv.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBidWh3cGNwZGNuYWhlYXl3bWR2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyNjU5MzksImV4cCI6MjA5MTg0MTkzOX0.Mg4PVg96ZiV3C2Rn0GLQU9c7ui_41OlU6Ldqn5jcvyY';
 
 // ── TABELA DE CUSTOS (invisível ao usuário) ──
+// ── TABELA DE CUSTOS (fallback — sobrescrita ao carregar pela Precificação via RPC) ──
 const SABORES = [
-  {nome:'Banoffe',               custo:36.88},
-  {nome:'Chocolate Belga',       custo:39.31},
-  {nome:'Chocolate Branco',      custo:40.12},
-  {nome:'Chocolate Dubai',       custo:37.49},
-  {nome:'Coco Branco',           custo:39.96},
-  {nome:'Doce de Leite',         custo:37.53},
-  {nome:'Floresta Negra',        custo:39.76},
-  {nome:'Frutas Vermelhas',      custo:34.78},
-  {nome:'Gianduia',              custo:56.97},
-  {nome:'Limão',                 custo:23.20},
-  {nome:'Manga',                 custo:27.69},
-  {nome:'Morango (Vegano)',       custo:31.24},
-  {nome:'Nocciola Crocante',     custo:51.20},
-  {nome:'Pavlova',               custo:39.69},
-  {nome:'Pistache',              custo:85.59},
-  {nome:'Rosso Nero',            custo:45.91},
-  {nome:'Snickers',              custo:45.20},
-  {nome:'Speculoos (Biscoff)',   custo:44.94},
-  {nome:'Tiramissù',             custo:48.46},
-  {nome:'Torta de Limão',        custo:44.48},
-  {nome:'Yogurte com Amarena',   custo:39.33},
+  {nome:'Banoffee',                     custo:35.95},
+  {nome:'Chocolate Branco',             custo:45.96},
+  {nome:'Chocolate Dubai',              custo:45.90},
+  {nome:'Chocolate Intenso',            custo:49.35},
+  {nome:'Coco Branco',                  custo:50.38},
+  {nome:'Coco Queimado',                custo:46.78},
+  {nome:'Doce de leite',                custo:44.53},
+  {nome:'Floresta Negra',               custo:44.74},
+  {nome:'Frutas Vermelhas',             custo:44.26},
+  {nome:'Gianduia',                     custo:64.49},
+  {nome:'Grape Fruit',                  custo:64.23},
+  {nome:'Leite Trufado',                custo:36.82},
+  {nome:'Limão',                        custo:30.56},
+  {nome:'Manga',                        custo:35.87},
+  {nome:'Manga com Maracujá Zero',      custo:77.05},
+  {nome:'Morango (Vegano)',             custo:40.07},
+  {nome:'Mousse de Pistache com laranja', custo:63.95},
+  {nome:'Nocciola Crocante',            custo:57.81},
+  {nome:'Paçoca',                       custo:38.15},
+  {nome:'Pavlova',                      custo:42.90},
+  {nome:'Pistache',                     custo:103.13},
+  {nome:'Rosso Nero',                   custo:44.42},
+  {nome:'Snichelato',                   custo:44.62},
+  {nome:'Speculoos',                    custo:48.03},
+  {nome:'Stracciatella',                custo:35.98},
+  {nome:'Tiramisù',                     custo:49.59},
+  {nome:'Torta de Limão',               custo:41.92},
+  {nome:'Yogurt com Amarena',           custo:46.53},
 ];
 
 const STORES = [
@@ -491,6 +499,27 @@ function setStatus(state,text){
   const d=document.getElementById('status-dot');
   d.className='status-dot'+(state!=='ok'?' '+state:'');
   document.getElementById('status-text').textContent=text;
+}
+
+// ── CUSTO: fonte única é o módulo de Precificação (fábrica->loja, aprovado, vigente hoje) ──
+// Substitui os valores fixos de SABORES pelos preços reais antes de qualquer tela usar custo.
+// Usa uma função ponte (SECURITY DEFINER) porque as tabelas de Precificação são restritas a
+// master/backoffice — assim qualquer usuário do CMV consegue ler o custo sem enxergar a base toda.
+async function carregarCustosPrecificacao(){
+  try{
+    const { data, error } = await sb.rpc('get_precificacao_custo_gelato');
+    if(error) throw error;
+    const custoPorNome = {};
+    (data||[]).forEach(r=>{ custoPorNome[r.nome] = Number(r.custo); });
+    const semPreco = [];
+    SABORES.forEach(s=>{
+      if(custoPorNome[s.nome] !== undefined) s.custo = custoPorNome[s.nome];
+      else semPreco.push(s.nome);
+    });
+    if(semPreco.length) console.warn('CMV: sem preço vigente na Precificação (mantido valor anterior) para:', semPreco.join(', '));
+  }catch(e){
+    console.error('CMV: falha ao buscar custos na Precificação, mantendo valores anteriores.', e);
+  }
 }
 
 // ── HELPERS ──
@@ -1433,7 +1462,8 @@ document.getElementById('cmv-meta-input').addEventListener('change',()=>{
 });
 
 // ── INIT ──
-function initApp(){
+async function initApp(){
+  await carregarCustosPrecificacao();
   initResumoFilters();
   buildNavTabs();
   document.getElementById('month-nav-block').style.display='none';
