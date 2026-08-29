@@ -308,11 +308,15 @@ async function carregarCatalogo(){
   ORDEM_CATEGORIAS.forEach(c => catalogoCache[c] = []);
 
   const { data: precif, error: errPrecif } = await sb.from('precificacao_produtos')
-    .select('id, nome, categoria, ativo')
+    .select('id, nome, categoria, ativo, origem')
     .in('categoria', CATEGORIAS_PRECIFICACAO)
     .order('nome');
   if (!errPrecif && precif) {
     precif.forEach(p => {
+      // "consumo_loja" é produto montado na loja na hora (ex: Cascão 3 bolas,
+      // Copinho, Casquinha) — não é item de estoque físico contável, então
+      // nunca entra na contagem, seja qual for a categoria.
+      if (p.origem === 'consumo_loja') return;
       // Considera gelatos inativos também (pode haver estoque de sabor descontinuado);
       // demais categorias, só ativos.
       if (p.ativo || p.categoria === 'Gelato') {
