@@ -155,7 +155,7 @@
       <div class="tab" id="tabContagem" data-tab="contagem" onclick="mudarTab('contagem')" style="display:none">📋 Nova Contagem</div>
       <div class="tab" id="tabHistorico" data-tab="historico" onclick="mudarTab('historico')" style="display:none">📜 Histórico</div>
       <div class="tab" id="tabRelatorio" data-tab="relatorio" onclick="mudarTab('relatorio')" style="display:none">📊 Relatório Consolidado</div>
-      <div class="tab" id="tabInsumos" data-tab="insumos" onclick="mudarTab('insumos')" style="display:none">🧾 Itens de Insumo</div>
+      <div class="tab" id="tabInsumos" data-tab="insumos" onclick="mudarTab('insumos')" style="display:none">🧾 Categorias e Itens</div>
     </nav>
   </aside>
   <div class="content-wrap">
@@ -185,8 +185,9 @@ const PORTAL_URL = 'https://thiagodlborges.github.io/Sistema-Luna/';
 const $ = id => document.getElementById(id);
 
 const TODAS_LOJAS = ['Esplanada','Cianê','Tucuruvi','Indaiatuba','Jundiaí','Praça da Moça - Diadema','Buriti Mogi Guaçu','SP Market','Iguatemi Campinas','Shopping Itaquera','Atrium'];
-const CATEGORIAS_PRECIFICACAO = ['Gelato','Potes','Confeitaria','Picolés','Picolés Yeez'];
-const ORDEM_CATEGORIAS = ['Gelato','Potes','Confeitaria','Picolés','Picolés Yeez','Insumo'];
+const CATEGORIAS_PRECIFICACAO = ['Gelato','Potes','Confeitaria','Picolés'];
+let ORDEM_CATEGORIAS = ['Gelato','Potes','Confeitaria','Picolés']; // completado dinamicamente em carregarCatalogo()
+let categoriasDinamicasCache = []; // [{id, nome, ordem, ativo}] — vindas de inventario_categorias
 
 let meuPerfil = null;
 let minhasLojas = [];
@@ -296,8 +297,13 @@ function renderTab(){
   (fns[currentTab] || renderContagem)();
 }
 
-// ── CATÁLOGO (Gelato/Pote/Confeitaria/Picolé vem da Precificação; Insumo é próprio) ──
+// ── CATÁLOGO (Gelato/Pote/Confeitaria/Picolé vem da Precificação; as demais
+// categorias são gerenciáveis dentro do próprio módulo, em "Categorias e Itens") ──
 async function carregarCatalogo(){
+  const { data: categorias } = await sb.from('inventario_categorias').select('*').eq('ativo', true).order('ordem').order('nome');
+  categoriasDinamicasCache = categorias || [];
+  ORDEM_CATEGORIAS = [...CATEGORIAS_PRECIFICACAO, ...categoriasDinamicasCache.map(c => c.nome)];
+
   catalogoCache = {};
   ORDEM_CATEGORIAS.forEach(c => catalogoCache[c] = []);
 
@@ -315,10 +321,17 @@ async function carregarCatalogo(){
     });
   }
 
-  const { data: insumos, error: errInsumos } = await sb.from('inventario_insumos_catalogo')
-    .select('*').eq('ativo', true).order('ordem').order('nome');
-  if (!errInsumos && insumos) {
-    catalogoCache['Insumo'] = insumos.map(i => ({ id: i.id, nome: i.nome, ativo: true, unidade: i.unidade }));
+  if (categoriasDinamicasCache.length) {
+    const { data: itens, error: errItens } = await sb.from('inventario_itens_catalogo')
+      .select('*').eq('ativo', true).order('ordem').order('nome');
+    if (!errItens && itens) {
+      const porCategoriaId = {};
+      categoriasDinamicasCache.forEach(c => { porCategoriaId[c.id] = c.nome; });
+      itens.forEach(i => {
+        const nomeCategoria = porCategoriaId[i.categoria_id];
+        if (nomeCategoria) catalogoCache[nomeCategoria].push({ id: i.id, nome: i.nome, ativo: true, unidade: i.unidade });
+      });
+    }
   }
 }
 
@@ -515,9 +528,9 @@ async function salvarLinhas(linhas){
       quantidade: l.quantidade,
       replicado_anterior: l.replicado,
     };
-    if (l.categoria === 'Insumo') payload.insumo_id = l.id; else payload.precificacao_produto_id = l.id;
+    if (CATEGORIAS_PRECIFICACAO.includes(l.categoria)) payload.precificacao_produto_id = l.id; else payload.insumo_id = l.id;
 
-    const conflictCol = l.categoria === 'Insumo' ? 'contagem_id,insumo_id' : 'contagem_id,precificacao_produto_id';
+    const conflictCol = CATEGORIAS_PRECIFICACAO.includes(l.categoria) ? 'contagem_id,precificacao_produto_id' : 'contagem_id,insumo_id';
     const { error } = await sb.from('inventario_itens').upsert(payload, { onConflict: conflictCol });
     if (error) return error;
   }
@@ -640,8 +653,19 @@ async function verDetalheContagem(id){
 async function renderRelatorio(){
   const el = $('mainContent');
   el.innerHTML = `<div class="card">
-    <h2>Relatório Consolidado</h2>
-    <p class="hint">Compara todas as lojas por data de contagem.</p>
+    <h2>Inventário Completo por Data</h2>
+    <p class="hint">Extrai o inventário de todas as lojas numa data específica, item a item, lado a lado.</p>
+    <div class="row">
+      <div class="field"><label>Data</label><input type="date" class="inp" id="relDataUnica" value="${hojeISO()}"></div>
+      <button class="btn" onclick="gerarInventarioPorData()">Gerar Inventário</button>
+      <button class="btn btn-outline" id="btnExportarPivot" onclick="exportarInventarioPorDataCSV()" style="display:none">⬇ Exportar CSV</button>
+    </div>
+    <div id="relPivotResultado"></div>
+  </div>
+
+  <div class="card">
+    <h2>Consulta por Loja / Período</h2>
+    <p class="hint">Lista as contagens individualmente, com detalhe por loja.</p>
     <div class="row">
       <div class="field"><label>Loja</label><select class="inp" id="relFiltroLoja" onchange="carregarRelatorio()">
         <option value="">Todas as lojas</option>
@@ -654,6 +678,87 @@ async function renderRelatorio(){
     <div id="relResultado"><div class="loading">Carregando…</div></div>
   </div>`;
   await carregarRelatorio();
+}
+
+let ultimoPivotDados = null; // { data, itens:[{categoria,nome,unidade,porLoja:{loja:qtd}}], lojasComContagem:[], lojasSemContagem:[] }
+
+async function gerarInventarioPorData(){
+  const data = $('relDataUnica').value;
+  const el = $('relPivotResultado');
+  const btnExport = $('btnExportarPivot');
+  if (!data) { alert('Selecione uma data.'); return; }
+  el.innerHTML = '<div class="loading">Carregando…</div>';
+  btnExport.style.display = 'none';
+
+  const { data: contagens, error } = await sb.from('inventario_contagens')
+    .select('*, inventario_itens(*)')
+    .eq('status', 'finalizada')
+    .eq('data_contagem', data);
+
+  if (error) { el.innerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
+
+  if (!contagens || !contagens.length) {
+    el.innerHTML = `<div class="alert-banner warn"><h4>Nenhuma contagem finalizada</h4>Nenhuma loja finalizou uma contagem em ${fmtData(data)}.</div>`;
+    ultimoPivotDados = null;
+    return;
+  }
+
+  const lojasComContagem = contagens.map(c => c.loja).sort();
+  const lojasSemContagem = TODAS_LOJAS.filter(l => !lojasComContagem.includes(l));
+
+  // Monta o pivot: chave (categoria+nome) -> {categoria, nome, unidade, porLoja:{loja:qtd}}
+  const mapaItens = {};
+  contagens.forEach(c => {
+    (c.inventario_itens || []).forEach(i => {
+      const chave = i.categoria + '|' + i.nome_produto;
+      if (!mapaItens[chave]) mapaItens[chave] = { categoria: i.categoria, nome: i.nome_produto, unidade: i.unidade, porLoja: {} };
+      mapaItens[chave].porLoja[c.loja] = Number(i.quantidade);
+    });
+  });
+
+  const itens = Object.values(mapaItens).sort((a, b) => {
+    const ordA = ORDEM_CATEGORIAS.indexOf(a.categoria), ordB = ORDEM_CATEGORIAS.indexOf(b.categoria);
+    if (ordA !== ordB) return ordA - ordB;
+    return a.nome.localeCompare(b.nome);
+  });
+
+  ultimoPivotDados = { data, itens, lojasComContagem, lojasSemContagem };
+
+  let html = '';
+  if (lojasSemContagem.length) {
+    html += `<div class="alert-banner warn"><h4>⚠️ Lojas sem contagem finalizada nesta data</h4>${lojasSemContagem.map(esc).join(', ')}</div>`;
+  }
+
+  html += `<div class="table-wrap"><table>
+    <tr><th>Categoria</th><th>Item</th>${lojasComContagem.map(l => `<th>${esc(l)}</th>`).join('')}<th>Total</th></tr>
+    ${itens.map(it => {
+      const total = lojasComContagem.reduce((s, l) => s + (it.porLoja[l] || 0), 0);
+      return `<tr><td>${esc(it.categoria)}</td><td>${esc(it.nome)}${it.unidade ? ' <span style="color:var(--text-light);font-size:.72rem">('+esc(it.unidade)+')</span>' : ''}</td>
+        ${lojasComContagem.map(l => `<td>${it.porLoja[l] !== undefined ? it.porLoja[l] : '—'}</td>`).join('')}
+        <td><strong>${total}</strong></td>
+      </tr>`;
+    }).join('')}
+  </table></div>`;
+
+  el.innerHTML = html;
+  btnExport.style.display = '';
+}
+
+function exportarInventarioPorDataCSV(){
+  if (!ultimoPivotDados) { alert('Gere o inventário antes de exportar.'); return; }
+  const { data, itens, lojasComContagem } = ultimoPivotDados;
+  const esc2 = v => `"${String(v).replace(/"/g, '""')}"`;
+  const linhas = [['Categoria','Item','Unidade', ...lojasComContagem, 'Total'].map(esc2).join(',')];
+  itens.forEach(it => {
+    const total = lojasComContagem.reduce((s, l) => s + (it.porLoja[l] || 0), 0);
+    linhas.push([it.categoria, it.nome, it.unidade||'', ...lojasComContagem.map(l => it.porLoja[l] !== undefined ? it.porLoja[l] : ''), total].map(esc2).join(','));
+  });
+  const csv = '\uFEFF' + linhas.join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `inventario-completo-${data}.csv`;
+  a.click();
 }
 
 let ultimoRelatorioDados = [];
@@ -711,20 +816,112 @@ async function renderInsumos(){
   const el = $('mainContent');
   el.innerHTML = `<div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-      <h2 style="margin:0">Itens de Insumo</h2>
-      <button class="btn" onclick="adicionarLinhaInsumo()">+ Novo Item</button>
+      <h2 style="margin:0">Categorias e Itens</h2>
+      <button class="btn" onclick="adicionarLinhaCategoria()">+ Nova Categoria</button>
     </div>
-    <p class="hint">Esta lista alimenta a categoria "Insumo" nas contagens. Gelato, Pote, Confeitaria e Picolé vêm automaticamente da Precificação.</p>
-    <div id="insumosLista"><div class="loading">Carregando…</div></div>
-  </div>`;
-  await carregarInsumos();
+    <p class="hint">Gelato, Pote, Confeitaria e Picolé vêm automaticamente da Precificação. As categorias daqui embaixo (Insumo, Variegatos, e qualquer outra que você criar) são geridas direto neste módulo.</p>
+    <div id="categoriasLista"><div class="loading">Carregando…</div></div>
+  </div>
+  <div id="itensPorCategoriaWrap"></div>`;
+  await carregarCategoriasGestao();
 }
 
-async function carregarInsumos(){
-  const el = $('insumosLista');
-  const { data, error } = await sb.from('inventario_insumos_catalogo').select('*').order('ordem').order('nome');
+async function carregarCategoriasGestao(){
+  const el = $('categoriasLista');
+  const { data, error } = await sb.from('inventario_categorias').select('*').order('ordem').order('nome');
   if (error) { el.innerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
-  if (!data || !data.length) { el.innerHTML = '<div class="empty">Nenhum insumo cadastrado ainda. Clique em "+ Novo Item" para começar.</div>'; return; }
+  if (!data || !data.length) { el.innerHTML = '<div class="empty">Nenhuma categoria cadastrada ainda. Clique em "+ Nova Categoria" para começar.</div>'; return; }
+
+  el.innerHTML = `<div class="table-wrap"><table>
+    <tr><th>Nome</th><th>Ordem</th><th>Ativa</th><th></th></tr>
+    ${data.map(c => `<tr class="${c.ativo?'':'inativo'}" data-cat-id="${c.id}">
+      <td><input class="inp" style="width:100%;min-width:180px" value="${esc(c.nome)}" data-field="nome"></td>
+      <td><input class="inp" type="number" style="width:80px" value="${c.ordem}" data-field="ordem"></td>
+      <td><input type="checkbox" ${c.ativo?'checked':''} data-field="ativo"></td>
+      <td style="white-space:nowrap">
+        <button class="btn-sm btn" onclick="salvarCategoria('${c.id}')">Salvar</button>
+        <button class="btn-outline btn btn-sm" onclick="verItensDaCategoria('${c.id}','${esc(c.nome)}')">Ver itens</button>
+        <button class="btn-danger" onclick="excluirCategoria('${c.id}','${esc(c.nome)}')">🗑</button>
+      </td>
+    </tr>`).join('')}
+  </table></div>`;
+}
+
+function adicionarLinhaCategoria(){
+  const el = $('categoriasLista');
+  if (el.querySelector('table')) {
+    const tbl = el.querySelector('table');
+    const tr = document.createElement('tr');
+    tr.dataset.catId = 'novo';
+    tr.innerHTML = `<td><input class="inp" style="width:100%;min-width:180px" placeholder="Nome da categoria" data-field="nome"></td>
+      <td><input class="inp" type="number" style="width:80px" value="50" data-field="ordem"></td>
+      <td><input type="checkbox" checked data-field="ativo"></td>
+      <td><button class="btn-sm btn" onclick="salvarCategoria('novo', this)">Salvar</button></td>`;
+    tbl.appendChild(tr);
+    tr.querySelector('input').focus();
+  } else {
+    el.innerHTML = `<div class="table-wrap"><table>
+      <tr><th>Nome</th><th>Ordem</th><th>Ativa</th><th></th></tr>
+      <tr data-cat-id="novo">
+        <td><input class="inp" style="width:100%;min-width:180px" placeholder="Nome da categoria" data-field="nome"></td>
+        <td><input class="inp" type="number" style="width:80px" value="50" data-field="ordem"></td>
+        <td><input type="checkbox" checked data-field="ativo"></td>
+        <td><button class="btn-sm btn" onclick="salvarCategoria('novo', this)">Salvar</button></td>
+      </tr>
+    </table></div>`;
+  }
+}
+
+async function salvarCategoria(id, btnEl){
+  const tr = (btnEl ? btnEl.closest('tr') : document.querySelector(`tr[data-cat-id="${id}"]`));
+  const nome = tr.querySelector('[data-field="nome"]').value.trim();
+  const ordem = Number(tr.querySelector('[data-field="ordem"]').value) || 0;
+  const ativo = tr.querySelector('[data-field="ativo"]').checked;
+  if (!nome) { alert('Informe o nome da categoria.'); return; }
+
+  if (id === 'novo') {
+    const { error } = await sb.from('inventario_categorias').insert({ nome, ordem, ativo, criado_por: meuPerfil.id, criado_por_nome: meuPerfil.nome });
+    if (error) { alert('Erro ao salvar: ' + error.message); return; }
+  } else {
+    const { error } = await sb.from('inventario_categorias').update({ nome, ordem, ativo }).eq('id', id);
+    if (error) { alert('Erro ao salvar: ' + error.message); return; }
+  }
+  await carregarCatalogo();
+  await carregarCategoriasGestao();
+}
+
+async function excluirCategoria(id, nome){
+  abrirModalConfirm('Excluir categoria', 'Remover a categoria "'+nome+'" e TODOS os itens cadastrados dentro dela? Contagens já finalizadas que usaram esses itens continuam com o histórico preservado.', async () => {
+    const { error: errItens } = await sb.from('inventario_itens_catalogo').delete().eq('categoria_id', id);
+    if (errItens) { alert('Erro ao excluir os itens da categoria: ' + errItens.message); return; }
+    const { error } = await sb.from('inventario_categorias').delete().eq('id', id);
+    if (error) { alert('Erro ao excluir a categoria: ' + error.message); return; }
+    $('itensPorCategoriaWrap').innerHTML = '';
+    await carregarCatalogo();
+    await carregarCategoriasGestao();
+  });
+}
+
+async function verItensDaCategoria(categoriaId, categoriaNome){
+  const wrap = $('itensPorCategoriaWrap');
+  wrap.innerHTML = '<div class="card"><div class="loading">Carregando…</div></div>';
+  wrap.scrollIntoView({ behavior: 'smooth' });
+
+  wrap.innerHTML = `<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <h2 style="margin:0">Itens — ${esc(categoriaNome)}</h2>
+      <button class="btn" onclick="adicionarLinhaItem('${categoriaId}')">+ Novo Item</button>
+    </div>
+    <div id="itensLista" data-categoria-id="${categoriaId}"><div class="loading">Carregando…</div></div>
+  </div>`;
+  await carregarItensDaCategoria(categoriaId);
+}
+
+async function carregarItensDaCategoria(categoriaId){
+  const el = $('itensLista');
+  const { data, error } = await sb.from('inventario_itens_catalogo').select('*').eq('categoria_id', categoriaId).order('ordem').order('nome');
+  if (error) { el.innerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
+  if (!data || !data.length) { el.innerHTML = '<div class="empty">Nenhum item cadastrado ainda nesta categoria. Clique em "+ Novo Item" para começar.</div>'; return; }
 
   el.innerHTML = `<div class="table-wrap"><table>
     <tr><th>Nome</th><th>Unidade</th><th>Ativo</th><th></th></tr>
@@ -733,62 +930,65 @@ async function carregarInsumos(){
       <td><input class="inp" style="width:90px" value="${esc(i.unidade)}" data-field="unidade"></td>
       <td><input type="checkbox" ${i.ativo?'checked':''} data-field="ativo"></td>
       <td style="white-space:nowrap">
-        <button class="btn-sm btn" onclick="salvarInsumo('${i.id}')">Salvar</button>
-        <button class="btn-danger" onclick="excluirInsumo('${i.id}')">🗑</button>
+        <button class="btn-sm btn" onclick="salvarItem('${i.id}')">Salvar</button>
+        <button class="btn-danger" onclick="excluirItem('${i.id}')">🗑</button>
       </td>
     </tr>`).join('')}
   </table></div>`;
 }
 
-function adicionarLinhaInsumo(){
-  const el = $('insumosLista');
+function adicionarLinhaItem(categoriaId){
+  const el = $('itensLista');
   if (el.querySelector('table')) {
     const tbl = el.querySelector('table');
     const tr = document.createElement('tr');
     tr.dataset.id = 'novo';
-    tr.innerHTML = `<td><input class="inp" style="width:100%;min-width:180px" placeholder="Nome do insumo" data-field="nome"></td>
+    tr.innerHTML = `<td><input class="inp" style="width:100%;min-width:180px" placeholder="Nome do item" data-field="nome"></td>
       <td><input class="inp" style="width:90px" value="unid." data-field="unidade"></td>
       <td><input type="checkbox" checked data-field="ativo"></td>
-      <td><button class="btn-sm btn" onclick="salvarInsumo('novo', this)">Salvar</button></td>`;
+      <td><button class="btn-sm btn" onclick="salvarItem('novo', this, '${categoriaId}')">Salvar</button></td>`;
     tbl.appendChild(tr);
     tr.querySelector('input').focus();
   } else {
     el.innerHTML = `<div class="table-wrap"><table>
       <tr><th>Nome</th><th>Unidade</th><th>Ativo</th><th></th></tr>
       <tr data-id="novo">
-        <td><input class="inp" style="width:100%;min-width:180px" placeholder="Nome do insumo" data-field="nome"></td>
+        <td><input class="inp" style="width:100%;min-width:180px" placeholder="Nome do item" data-field="nome"></td>
         <td><input class="inp" style="width:90px" value="unid." data-field="unidade"></td>
         <td><input type="checkbox" checked data-field="ativo"></td>
-        <td><button class="btn-sm btn" onclick="salvarInsumo('novo', this)">Salvar</button></td>
+        <td><button class="btn-sm btn" onclick="salvarItem('novo', this, '${categoriaId}')">Salvar</button></td>
       </tr>
     </table></div>`;
   }
 }
 
-async function salvarInsumo(id, btnEl){
+async function salvarItem(id, btnEl, categoriaId){
   const tr = (btnEl ? btnEl.closest('tr') : document.querySelector(`tr[data-id="${id}"]`));
   const nome = tr.querySelector('[data-field="nome"]').value.trim();
   const unidade = tr.querySelector('[data-field="unidade"]').value.trim() || 'unid.';
   const ativo = tr.querySelector('[data-field="ativo"]').checked;
-  if (!nome) { alert('Informe o nome do insumo.'); return; }
+  if (!nome) { alert('Informe o nome do item.'); return; }
+
+  const catId = categoriaId || $('itensLista').dataset.categoriaId;
 
   if (id === 'novo') {
-    const { error } = await sb.from('inventario_insumos_catalogo').insert({ nome, unidade, ativo, criado_por: meuPerfil.id, criado_por_nome: meuPerfil.nome });
+    const { error } = await sb.from('inventario_itens_catalogo').insert({ categoria_id: catId, nome, unidade, ativo, criado_por: meuPerfil.id, criado_por_nome: meuPerfil.nome });
     if (error) { alert('Erro ao salvar: ' + error.message); return; }
   } else {
-    const { error } = await sb.from('inventario_insumos_catalogo').update({ nome, unidade, ativo }).eq('id', id);
+    const { error } = await sb.from('inventario_itens_catalogo').update({ nome, unidade, ativo }).eq('id', id);
     if (error) { alert('Erro ao salvar: ' + error.message); return; }
   }
   await carregarCatalogo();
-  await carregarInsumos();
+  await carregarItensDaCategoria(catId);
 }
 
-async function excluirInsumo(id){
-  abrirModalConfirm('Excluir insumo', 'Remover este item da lista de insumos? Contagens já finalizadas que usaram este item continuam com o histórico preservado.', async () => {
-    const { error } = await sb.from('inventario_insumos_catalogo').delete().eq('id', id);
+async function excluirItem(id){
+  abrirModalConfirm('Excluir item', 'Remover este item da categoria? Contagens já finalizadas que usaram este item continuam com o histórico preservado.', async () => {
+    const catId = $('itensLista').dataset.categoriaId;
+    const { error } = await sb.from('inventario_itens_catalogo').delete().eq('id', id);
     if (error) { alert('Erro ao excluir: ' + error.message); return; }
     await carregarCatalogo();
-    await carregarInsumos();
+    await carregarItensDaCategoria(catId);
   });
 }
 
