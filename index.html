@@ -156,6 +156,7 @@
       <div class="tab" id="tabHistorico" data-tab="historico" onclick="mudarTab('historico')" style="display:none">📜 Histórico</div>
       <div class="tab" id="tabRelatorio" data-tab="relatorio" onclick="mudarTab('relatorio')" style="display:none">📊 Relatório Consolidado</div>
       <div class="tab" id="tabInsumos" data-tab="insumos" onclick="mudarTab('insumos')" style="display:none">🧾 Categorias e Itens</div>
+      <div class="tab" id="tabCDLuna" data-tab="cdluna" onclick="mudarTab('cdluna')" style="display:none">📦 CD Luna</div>
     </nav>
   </aside>
   <div class="content-wrap">
@@ -267,6 +268,7 @@ async function verificarAcessoEIniciar(){
     $('tabHistorico').style.display = '';
     $('tabRelatorio').style.display = '';
     $('tabInsumos').style.display = '';
+    $('tabCDLuna').style.display = '';
   }
 
   currentTab = temPapelDeLoja ? 'contagem' : (souGerencial ? 'relatorio' : 'historico');
@@ -293,7 +295,7 @@ function mudarTab(tab){
 }
 
 function renderTab(){
-  const fns = { contagem: renderContagem, historico: renderHistorico, relatorio: renderRelatorio, insumos: renderInsumos };
+  const fns = { contagem: renderContagem, historico: renderHistorico, relatorio: renderRelatorio, insumos: renderInsumos, cdluna: renderCDLuna };
   (fns[currentTab] || renderContagem)();
 }
 
@@ -994,6 +996,284 @@ async function excluirItem(id){
     await carregarCatalogo();
     await carregarItensDaCategoria(catId);
   });
+}
+
+// ── CD LUNA (contagem própria, catálogo vem do módulo Estoque CD Luna) ────
+const LOJA_CD = 'CD Luna';
+let cdCatalogoCache = {};
+let cdOrdemCategorias = [];
+let cdContagemAtiva = null;
+let cdItensAtuais = {};
+let cdItensAnteriores = {};
+let cdMostrandoHistorico = false;
+
+async function carregarCatalogoCD(){
+  const { data, error } = await sb.schema('luna_varejo').from('produtos').select('id, produto, categoria, unidade').order('categoria').order('produto');
+  cdCatalogoCache = {};
+  if (error || !data) { cdOrdemCategorias = []; return; }
+  data.forEach(p => {
+    const cat = p.categoria || 'Outros';
+    (cdCatalogoCache[cat] = cdCatalogoCache[cat] || []).push({ id: p.id, nome: p.produto, unidade: p.unidade });
+  });
+  cdOrdemCategorias = Object.keys(cdCatalogoCache).sort();
+}
+
+async function renderCDLuna(){
+  const el = $('mainContent');
+  el.innerHTML = '<div class="loading">Carregando…</div>';
+
+  if (!cdOrdemCategorias.length) await carregarCatalogoCD();
+
+  if (cdMostrandoHistorico) { await renderHistoricoCD(); return; }
+
+  const hoje = new Date();
+  const hojeStr = hojeISO();
+  const ehTerca = hoje.getDay() === 2;
+  const ehUltimoDia = ultimoDiaDoMes(hoje);
+
+  const { data: existente } = await sb.from('inventario_contagens')
+    .select('*').eq('loja', LOJA_CD).eq('data_contagem', hojeStr).maybeSingle();
+
+  let bannerHtml = '';
+  if (ehTerca || ehUltimoDia) {
+    const motivos = [];
+    if (ehTerca) motivos.push('contagem semanal (terça-feira)');
+    if (ehUltimoDia) motivos.push('contagem adicional de fim de mês');
+    bannerHtml = `<div class="alert-banner ok"><h4>📅 Hoje é dia de contagem</h4>Hoje é dia programado para ${motivos.join(' e ')}. </div>`;
+  } else {
+    bannerHtml = `<div class="alert-banner warn"><h4>Hoje não é um dia programado</h4>A contagem é semanal (terças-feiras), com uma contagem adicional no último dia do mês. Você ainda pode registrar uma contagem hoje se precisar.</div>`;
+  }
+
+  const cabecalho = `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0">Contagem — CD Luna</h2>
+      <button class="rank-btn rank-btn-ghost" onclick="cdMostrandoHistorico=true; renderCDLuna()">📜 Ver histórico do CD Luna</button>
+    </div>`;
+
+  if (existente && existente.status === 'finalizada') {
+    el.innerHTML = `<div class="card">${cabecalho}${bannerHtml}
+      <div class="alert-banner info"><h4>✔ Contagem de hoje já finalizada</h4>A contagem de ${fmtData(hojeStr)} (${existente.tipo === 'mensal' ? 'mensal' : 'semanal'}) já foi concluída às ${fmtDataHora(existente.finalizado_em)}.</div>
+    </div>`;
+    return;
+  }
+
+  cdContagemAtiva = existente || null;
+
+  el.innerHTML = `<div class="card">
+    ${cabecalho}
+    ${bannerHtml}
+    <p class="hint">Itens do CD Luna (Confeitaria, Embalagem, Uniformes, Variegatos, Produção, Outros — conforme o cadastro do Estoque CD Luna). Você pode salvar parcialmente e continuar depois.</p>
+    <div class="row">
+      <div class="field"><label>Data da contagem</label><input type="date" class="inp" id="cdContData" value="${existente ? existente.data_contagem : hojeStr}" ${existente ? 'disabled' : ''}></div>
+      <div class="field"><label>Tipo</label>
+        <select class="inp" id="cdContTipo" ${existente ? 'disabled' : ''}>
+          <option value="semanal" ${(existente ? existente.tipo==='semanal' : !ehUltimoDia)?'selected':''}>Semanal</option>
+          <option value="mensal" ${(existente ? existente.tipo==='mensal' : ehUltimoDia)?'selected':''}>Mensal (fim de mês)</option>
+        </select>
+      </div>
+      ${!existente ? '<button class="btn" onclick="iniciarContagemCD()">Iniciar Contagem</button>' : ''}
+    </div>
+    <div id="cdContFormulario"></div>
+  </div>`;
+
+  if (existente) await carregarFormularioContagemCD();
+}
+
+async function iniciarContagemCD(){
+  const data = $('cdContData').value;
+  const tipo = $('cdContTipo').value;
+  if (!data) { alert('Selecione a data.'); return; }
+
+  const { data: nova, error } = await sb.from('inventario_contagens').insert({
+    loja: LOJA_CD, data_contagem: data, tipo,
+    criado_por: meuPerfil.id, criado_por_nome: meuPerfil.nome
+  }).select('*').single();
+
+  if (error) {
+    if (error.message.includes('duplicate') || error.code === '23505') {
+      alert('Já existe uma contagem do CD Luna nesta data. Recarregando…');
+      renderCDLuna();
+      return;
+    }
+    alert('Erro ao iniciar contagem: ' + error.message);
+    return;
+  }
+  cdContagemAtiva = nova;
+  renderCDLuna();
+}
+
+async function carregarFormularioContagemCD(){
+  const wrap = $('cdContFormulario');
+  wrap.innerHTML = '<div class="loading">Carregando itens…</div>';
+
+  const { data: itensExistentes } = await sb.from('inventario_itens').select('*').eq('contagem_id', cdContagemAtiva.id);
+  cdItensAtuais = {};
+  (itensExistentes || []).forEach(i => {
+    cdItensAtuais[chaveItem(i.categoria, i.luna_varejo_produto_id)] = { quantidade: i.quantidade, replicado: i.replicado_anterior };
+  });
+
+  const { data: anteriorHead } = await sb.from('inventario_contagens')
+    .select('id').eq('loja', LOJA_CD).eq('status', 'finalizada')
+    .lt('data_contagem', cdContagemAtiva.data_contagem)
+    .order('data_contagem', { ascending: false }).limit(1).maybeSingle();
+
+  cdItensAnteriores = {};
+  if (anteriorHead) {
+    const { data: itensAnt } = await sb.from('inventario_itens').select('*').eq('contagem_id', anteriorHead.id);
+    (itensAnt || []).forEach(i => {
+      cdItensAnteriores[chaveItem(i.categoria, i.luna_varejo_produto_id)] = i.quantidade;
+    });
+  }
+
+  if (!cdOrdemCategorias.length) {
+    wrap.innerHTML = '<div class="empty">Nenhum item cadastrado no Estoque CD Luna ainda.</div>';
+    return;
+  }
+
+  let html = '';
+  cdOrdemCategorias.forEach(cat => {
+    const itens = cdCatalogoCache[cat] || [];
+    if (!itens.length) return;
+    const temAnteriorNaCategoria = itens.some(it => cdItensAnteriores[chaveItem(cat, it.id)] !== undefined);
+    html += `<div class="categoria-titulo"><span>${esc(cat)}</span>
+      ${temAnteriorNaCategoria ? `<button class="cat-repetir" onclick="repetirCategoriaCD('${esc(cat)}')">🔁 Repetir tudo da anterior</button>` : ''}
+    </div>`;
+    itens.forEach(it => {
+      const chave = chaveItem(cat, it.id);
+      const atual = cdItensAtuais[chave];
+      const anterior = cdItensAnteriores[chave];
+      html += `<div class="item-row" data-chave="${esc(chave)}">
+        <div class="item-nome">${esc(it.nome)}</div>
+        <div class="item-anterior">${anterior !== undefined ? 'ant.: ' + Number(anterior) : ''}</div>
+        <button type="button" class="item-repetir" title="Repetir valor anterior" onclick="repetirItemCD('${esc(chave)}')" ${anterior===undefined?'disabled':''}>🔁</button>
+        <input type="number" min="0" step="0.01" class="item-qtd${atual&&atual.replicado?' replicado':''}" value="${atual ? atual.quantidade : ''}" data-cat="${esc(cat)}" data-id="${esc(String(it.id))}">
+        <span class="item-unid">${esc(it.unidade||'')}</span>
+      </div>`;
+    });
+  });
+
+  wrap.innerHTML = html + `
+    <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap">
+      <button class="btn btn-outline" onclick="salvarRascunhoCD()">Salvar e Continuar Depois</button>
+      <button class="btn" onclick="finalizarContagemCD()">Finalizar Contagem</button>
+    </div>
+    <div id="cdContMsg" class="msg"></div>`;
+}
+
+function repetirItemCD(chave){
+  const row = document.querySelector(`#cdContFormulario .item-row[data-chave="${CSS.escape(chave)}"]`);
+  if (!row) return;
+  const valor = cdItensAnteriores[chave];
+  if (valor === undefined) return;
+  const input = row.querySelector('.item-qtd');
+  input.value = Number(valor);
+  input.classList.add('replicado');
+}
+
+function repetirCategoriaCD(cat){
+  document.querySelectorAll(`#cdContFormulario .item-row input.item-qtd[data-cat="${CSS.escape(cat)}"]`).forEach(input => {
+    const row = input.closest('.item-row');
+    const chave = row.dataset.chave;
+    const valor = cdItensAnteriores[chave];
+    if (valor !== undefined && !input.value) {
+      input.value = Number(valor);
+      input.classList.add('replicado');
+    }
+  });
+}
+
+function coletarLinhasFormularioCD(){
+  return [...document.querySelectorAll('#cdContFormulario .item-row')].map(row => {
+    const input = row.querySelector('.item-qtd');
+    return {
+      categoria: input.dataset.cat,
+      id: Number(input.dataset.id),
+      quantidade: input.value === '' ? null : parseFloat(input.value),
+      replicado: input.classList.contains('replicado')
+    };
+  });
+}
+
+async function salvarLinhasCD(linhas){
+  const paraSalvar = linhas.filter(l => l.quantidade !== null && !isNaN(l.quantidade));
+  for (const l of paraSalvar) {
+    const item = (cdCatalogoCache[l.categoria] || []).find(i => i.id === l.id);
+    const payload = {
+      contagem_id: cdContagemAtiva.id,
+      categoria: l.categoria,
+      nome_produto: item ? item.nome : String(l.id),
+      unidade: item ? item.unidade : null,
+      quantidade: l.quantidade,
+      replicado_anterior: l.replicado,
+      luna_varejo_produto_id: l.id,
+    };
+    const { error } = await sb.from('inventario_itens').upsert(payload, { onConflict: 'contagem_id,luna_varejo_produto_id' });
+    if (error) return error;
+  }
+  return null;
+}
+
+async function salvarRascunhoCD(){
+  const linhas = coletarLinhasFormularioCD();
+  const btn = document.querySelector('#cdContFormulario button.btn-outline');
+  btn.disabled = true; btn.textContent = 'Salvando…';
+  const error = await salvarLinhasCD(linhas);
+  btn.disabled = false; btn.textContent = 'Salvar e Continuar Depois';
+  if (error) { showMsg('cdContMsg', 'Erro ao salvar: ' + error.message, 'err'); return; }
+  showMsg('cdContMsg', 'Rascunho salvo.', 'ok');
+}
+
+async function finalizarContagemCD(){
+  const linhas = coletarLinhasFormularioCD();
+  const semValor = linhas.filter(l => l.quantidade === null || isNaN(l.quantidade));
+  if (semValor.length) {
+    abrirModalConfirm('Itens sem valor', `${semValor.length} item(ns) ficaram sem quantidade preenchida e não vão entrar na contagem. Confirma finalizar mesmo assim?`, async () => {
+      await executarFinalizacaoCD(linhas);
+    });
+    return;
+  }
+  await executarFinalizacaoCD(linhas);
+}
+
+async function executarFinalizacaoCD(linhas){
+  showMsg('cdContMsg', '', '');
+  const error = await salvarLinhasCD(linhas);
+  if (error) { showMsg('cdContMsg', 'Erro ao salvar: ' + error.message, 'err'); return; }
+
+  const { error: errFinal } = await sb.from('inventario_contagens')
+    .update({ status: 'finalizada', finalizado_em: new Date().toISOString() })
+    .eq('id', cdContagemAtiva.id);
+  if (errFinal) { showMsg('cdContMsg', 'Erro ao finalizar: ' + errFinal.message, 'err'); return; }
+
+  cdContagemAtiva = null;
+  renderCDLuna();
+}
+
+async function renderHistoricoCD(){
+  const el = $('mainContent');
+  el.innerHTML = `<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0">Histórico — CD Luna</h2>
+      <button class="rank-btn rank-btn-ghost" onclick="cdMostrandoHistorico=false; renderCDLuna()">← Voltar pra contagem</button>
+    </div>
+    <div id="histLista"><div class="loading">Carregando…</div></div>
+  </div>
+  <div id="histDetalheWrap"></div>`;
+
+  const { data, error } = await sb.from('inventario_contagens').select('*').eq('loja', LOJA_CD).order('data_contagem', { ascending: false }).limit(100);
+  const listaEl = $('histLista');
+  if (error) { listaEl.innerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
+  if (!data || !data.length) { listaEl.innerHTML = '<div class="empty">Nenhuma contagem do CD Luna registrada ainda.</div>'; return; }
+
+  listaEl.innerHTML = `<div class="table-wrap"><table>
+    <tr><th>Data</th><th>Tipo</th><th>Status</th><th>Finalizada em</th><th></th></tr>
+    ${data.map(c => `<tr>
+      <td>${fmtData(c.data_contagem)}</td>
+      <td><span class="badge badge-${c.tipo}">${c.tipo === 'mensal' ? 'Mensal' : 'Semanal'}</span></td>
+      <td><span class="badge badge-${c.status === 'finalizada' ? 'concluido' : 'andamento'}">${c.status === 'finalizada' ? 'Finalizada' : 'Em andamento'}</span></td>
+      <td>${c.finalizado_em ? fmtDataHora(c.finalizado_em) : '—'}</td>
+      <td><button class="btn-sm btn" onclick="verDetalheContagem(${c.id})">Ver</button></td>
+    </tr>`).join('')}
+  </table></div>`;
 }
 
 sb.auth.getSession().then(({ data }) => { if (data && data.session) verificarAcessoEIniciar(); else window.location.href = PORTAL_URL; });
