@@ -312,7 +312,9 @@ function renderTab(){
 // categorias são gerenciáveis dentro do próprio módulo, em "Categorias e Itens") ──
 async function carregarCatalogo(){
   const { data: categorias } = await sb.from('inventario_categorias').select('*').eq('ativo', true).order('ordem').order('nome');
-  categoriasDinamicasCache = categorias || [];
+  // Categorias que começam com "CD " são exclusivas da contagem do CD Luna —
+  // não entram na contagem das lojas.
+  categoriasDinamicasCache = (categorias || []).filter(c => !c.nome.startsWith('CD '));
   ORDEM_CATEGORIAS = [...CATEGORIAS_PRECIFICACAO, ...categoriasDinamicasCache.map(c => c.nome)];
 
   catalogoCache = {};
@@ -1017,14 +1019,21 @@ let cdItensAnteriores = {};
 let cdMostrandoHistorico = false;
 
 async function carregarCatalogoCD(){
-  const { data, error } = await sb.schema('luna_varejo').from('produtos').select('id, produto, categoria, unidade').order('categoria').order('produto');
+  const { data: categorias } = await sb.from('inventario_categorias').select('*').eq('ativo', true).like('nome', 'CD %').order('ordem').order('nome');
   cdCatalogoCache = {};
-  if (error || !data) { cdOrdemCategorias = []; return; }
-  data.forEach(p => {
-    const cat = p.categoria || 'Outros';
-    (cdCatalogoCache[cat] = cdCatalogoCache[cat] || []).push({ id: p.id, nome: p.produto, unidade: p.unidade });
+  cdOrdemCategorias = (categorias || []).map(c => c.nome.replace(/^CD /, ''));
+  if (!categorias || !categorias.length) return;
+
+  const idsCategorias = categorias.map(c => c.id);
+  const nomePorId = {};
+  categorias.forEach(c => { nomePorId[c.id] = c.nome.replace(/^CD /, ''); });
+
+  const { data: itens, error } = await sb.from('inventario_itens_catalogo').select('*').in('categoria_id', idsCategorias).eq('ativo', true).order('ordem').order('nome');
+  if (error || !itens) return;
+  itens.forEach(i => {
+    const cat = nomePorId[i.categoria_id];
+    (cdCatalogoCache[cat] = cdCatalogoCache[cat] || []).push({ id: i.id, nome: i.nome, unidade: i.unidade });
   });
-  cdOrdemCategorias = Object.keys(cdCatalogoCache).sort();
 }
 
 async function renderCDLuna(){
@@ -1117,7 +1126,7 @@ async function carregarFormularioContagemCD(){
   const { data: itensExistentes } = await sb.from('inventario_itens').select('*').eq('contagem_id', cdContagemAtiva.id);
   cdItensAtuais = {};
   (itensExistentes || []).forEach(i => {
-    cdItensAtuais[chaveItem(i.categoria, i.luna_varejo_produto_id)] = { quantidade: i.quantidade, replicado: i.replicado_anterior };
+    cdItensAtuais[chaveItem(i.categoria, i.insumo_id)] = { quantidade: i.quantidade, replicado: i.replicado_anterior };
   });
 
   const { data: anteriorHead } = await sb.from('inventario_contagens')
@@ -1129,7 +1138,7 @@ async function carregarFormularioContagemCD(){
   if (anteriorHead) {
     const { data: itensAnt } = await sb.from('inventario_itens').select('*').eq('contagem_id', anteriorHead.id);
     (itensAnt || []).forEach(i => {
-      cdItensAnteriores[chaveItem(i.categoria, i.luna_varejo_produto_id)] = i.quantidade;
+      cdItensAnteriores[chaveItem(i.categoria, i.insumo_id)] = i.quantidade;
     });
   }
 
@@ -1195,7 +1204,7 @@ function coletarLinhasFormularioCD(){
     const input = row.querySelector('.item-qtd');
     return {
       categoria: input.dataset.cat,
-      id: Number(input.dataset.id),
+      id: input.dataset.id,
       quantidade: input.value === '' ? null : parseFloat(input.value),
       replicado: input.classList.contains('replicado')
     };
@@ -1205,7 +1214,7 @@ function coletarLinhasFormularioCD(){
 async function salvarLinhasCD(linhas){
   const paraSalvar = linhas.filter(l => l.quantidade !== null && !isNaN(l.quantidade));
   for (const l of paraSalvar) {
-    const item = (cdCatalogoCache[l.categoria] || []).find(i => i.id === l.id);
+    const item = (cdCatalogoCache[l.categoria] || []).find(i => String(i.id) === l.id);
     const payload = {
       contagem_id: cdContagemAtiva.id,
       categoria: l.categoria,
@@ -1213,9 +1222,9 @@ async function salvarLinhasCD(linhas){
       unidade: item ? item.unidade : null,
       quantidade: l.quantidade,
       replicado_anterior: l.replicado,
-      luna_varejo_produto_id: l.id,
+      insumo_id: l.id,
     };
-    const { error } = await sb.from('inventario_itens').upsert(payload, { onConflict: 'contagem_id,luna_varejo_produto_id' });
+    const { error } = await sb.from('inventario_itens').upsert(payload, { onConflict: 'contagem_id,insumo_id' });
     if (error) return error;
   }
   return null;
