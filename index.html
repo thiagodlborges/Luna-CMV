@@ -68,6 +68,9 @@
   .badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:.68rem;font-weight:600;white-space:nowrap}
   .badge-andamento{background:#EAF2FB;color:#2E6DA4}
   .badge-concluido{background:#E8F8F0;color:#27AE60}
+  .badge-naoiniciada{background:#FBE2E2;color:#B43C3C}
+  .badge-zerado{background:#FBE2E2;color:#B43C3C;font-weight:700}
+  .badge-baixo{background:#FEF6E7;color:#B8860B;font-weight:700}
   .badge-semanal{background:var(--creme);color:var(--text-light)}
   .badge-mensal{background:#FEF6E7;color:#B8860B}
 
@@ -157,6 +160,7 @@
       <div class="tab" id="tabRelatorio" data-tab="relatorio" onclick="mudarTab('relatorio')" style="display:none">📊 Relatório Consolidado</div>
       <div class="tab" id="tabInsumos" data-tab="insumos" onclick="mudarTab('insumos')" style="display:none">🧾 Categorias e Itens</div>
       <div class="tab" id="tabCDLuna" data-tab="cdluna" onclick="mudarTab('cdluna')" style="display:none">📦 CD Luna</div>
+      <div class="tab" id="tabPainelCentral" data-tab="painelcentral" onclick="mudarTab('painelcentral')" style="display:none">🎛️ Painel Central</div>
     </nav>
   </aside>
   <div class="content-wrap">
@@ -197,6 +201,7 @@ let currentTab = null;
 let souMaster = false;
 let souBackoffice = false;
 let souGerencial = false;
+let souPainelCentral = false;
 let temPapelDeLoja = false;
 
 let catalogoCache = null; // { 'Gelato':[{id,nome,ativo}], ..., 'Insumo':[...] }
@@ -244,6 +249,7 @@ async function verificarAcessoEIniciar(){
   souMaster = perfil.tipo === 'master';
   souBackoffice = souMaster || perfil.cmv_backoffice === true;
   souGerencial = souBackoffice || perfil.tipo === 'backoffice';
+  souPainelCentral = souMaster || perfil.inventario_painel_acesso === true;
   temPapelDeLoja = ['loja','master_loja','master'].includes(perfil.tipo);
 
   if (perfil.tipo === 'master' || perfil.tipo === 'master_loja') minhasLojas = [...TODAS_LOJAS];
@@ -270,8 +276,11 @@ async function verificarAcessoEIniciar(){
     $('tabInsumos').style.display = '';
     $('tabCDLuna').style.display = '';
   }
+  if (souPainelCentral) {
+    $('tabPainelCentral').style.display = '';
+  }
 
-  currentTab = temPapelDeLoja ? 'contagem' : (souGerencial ? 'relatorio' : 'historico');
+  currentTab = temPapelDeLoja ? 'contagem' : (souPainelCentral ? 'painelcentral' : (souGerencial ? 'relatorio' : 'historico'));
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab===currentTab));
 
   await carregarCatalogo();
@@ -295,7 +304,7 @@ function mudarTab(tab){
 }
 
 function renderTab(){
-  const fns = { contagem: renderContagem, historico: renderHistorico, relatorio: renderRelatorio, insumos: renderInsumos, cdluna: renderCDLuna };
+  const fns = { contagem: renderContagem, historico: renderHistorico, relatorio: renderRelatorio, insumos: renderInsumos, cdluna: renderCDLuna, painelcentral: renderPainelCentral };
   (fns[currentTab] || renderContagem)();
 }
 
@@ -1274,6 +1283,202 @@ async function renderHistoricoCD(){
       <td><button class="btn-sm btn" onclick="verDetalheContagem(${c.id})">Ver</button></td>
     </tr>`).join('')}
   </table></div>`;
+}
+
+// ── PAINEL CENTRAL (só master, Jussara e Felipe) ──────────
+// Visão consolidada: status de contagem por loja numa data, itens com
+// estoque baixo/zerado (por loja ou consolidado), e busca por item
+// mostrando o status daquele item em todas as lojas.
+let painelData = hojeISO();
+let painelModoEstoque = 'consolidado';
+let painelLojaSelecionada = TODAS_LOJAS[0];
+let painelEstoqueMinimoCache = {};
+let painelItensCacheData = null; // cache dos itens carregados pra data atual (evita rebuscar 2x)
+
+async function renderPainelCentral(){
+  const el = $('mainContent');
+  el.innerHTML = `
+    <div class="card">
+      <h2>Painel Central</h2>
+      <p class="hint">Visão consolidada de todas as lojas — status de contagem, estoque baixo/zerado, e busca por item.</p>
+      <div class="row" style="align-items:flex-end">
+        <div class="field"><label>Data de referência</label><input type="date" class="inp" id="painelDataInput" value="${painelData}" onchange="onMudarPainelData()"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 style="font-size:1.1rem">📋 Status de contagem — ${fmtData(painelData)}</h2>
+      <div id="painelStatusLojas"><div class="loading">Carregando…</div></div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+        <h2 style="font-size:1.1rem;margin:0">⚠️ Estoque baixo ou zerado</h2>
+        <div class="row" style="margin:0;gap:10px;align-items:center">
+          <select class="inp" id="painelModoEstoqueSelect" style="width:170px" onchange="onMudarModoEstoque()">
+            <option value="consolidado" ${painelModoEstoque==='consolidado'?'selected':''}>Todas as lojas</option>
+            <option value="loja" ${painelModoEstoque==='loja'?'selected':''}>Uma loja específica</option>
+          </select>
+          <select class="inp" id="painelLojaEstoqueSelect" style="width:170px;display:${painelModoEstoque==='loja'?'':'none'}" onchange="onMudarLojaEstoque()">
+            ${TODAS_LOJAS.map(l=>'<option value="'+esc(l)+'"'+(l===painelLojaSelecionada?' selected':'')+'>'+esc(l)+'</option>').join('')}
+          </select>
+        </div>
+      </div>
+      <p class="hint">"Zerado" é automático (quantidade = 0). "Baixo" depende de um mínimo definido por item — defina ao lado de cada item na lista.</p>
+      <div id="painelEstoqueBaixo"><div class="loading">Carregando…</div></div>
+    </div>
+
+    <div class="card">
+      <h2 style="font-size:1.1rem">🔎 Buscar item em todas as lojas</h2>
+      <div class="field" style="max-width:420px"><label>Nome do item</label><input type="text" class="inp" id="painelBuscaItem" placeholder="Digite pra buscar…" oninput="onBuscarItemPainel()"></div>
+      <div id="painelBuscaResultado"></div>
+    </div>`;
+
+  await carregarStatusLojasPainel();
+  await carregarDadosEstoquePainel();
+  await carregarEstoqueMinimoPainel();
+  renderEstoqueBaixoPainel();
+}
+
+function onMudarPainelData(){
+  painelData = $('painelDataInput').value;
+  renderPainelCentral();
+}
+function onMudarModoEstoque(){
+  painelModoEstoque = $('painelModoEstoqueSelect').value;
+  $('painelLojaEstoqueSelect').style.display = painelModoEstoque === 'loja' ? '' : 'none';
+  renderEstoqueBaixoPainel();
+}
+function onMudarLojaEstoque(){
+  painelLojaSelecionada = $('painelLojaEstoqueSelect').value;
+  renderEstoqueBaixoPainel();
+}
+
+async function carregarStatusLojasPainel(){
+  const el = $('painelStatusLojas');
+  const { data, error } = await sb.from('inventario_contagens').select('*').eq('data_contagem', painelData).in('loja', TODAS_LOJAS);
+  if (error) { el.innerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
+
+  const porLoja = {};
+  (data||[]).forEach(c => { porLoja[c.loja] = c; });
+
+  const linhas = TODAS_LOJAS.map(loja => {
+    const c = porLoja[loja];
+    let statusLabel, statusClass;
+    if (!c) { statusLabel = 'Não iniciada'; statusClass = 'naoiniciada'; }
+    else if (c.status === 'finalizada') { statusLabel = 'Finalizada'; statusClass = 'concluido'; }
+    else { statusLabel = 'Em andamento'; statusClass = 'andamento'; }
+    return { loja, c, statusLabel, statusClass };
+  }).sort((a,b) => {
+    const ordem = { naoiniciada: 0, andamento: 1, concluido: 2 };
+    return ordem[a.statusClass] - ordem[b.statusClass] || a.loja.localeCompare(b.loja);
+  });
+
+  el.innerHTML = `<div class="table-wrap"><table>
+    <tr><th>Loja</th><th>Status</th><th>Tipo</th><th>Finalizada em</th></tr>
+    ${linhas.map(l => `<tr>
+      <td>${esc(l.loja)}</td>
+      <td><span class="badge badge-${l.statusClass}">${l.statusLabel}</span></td>
+      <td>${l.c ? '<span class="badge badge-'+l.c.tipo+'">'+(l.c.tipo==='mensal'?'Mensal':'Semanal')+'</span>' : '—'}</td>
+      <td>${l.c && l.c.finalizado_em ? fmtDataHora(l.c.finalizado_em) : '—'}</td>
+    </tr>`).join('')}
+  </table></div>`;
+}
+
+async function carregarDadosEstoquePainel(){
+  const { data: contagens } = await sb.from('inventario_contagens').select('id, loja, status').eq('data_contagem', painelData).in('loja', TODAS_LOJAS);
+  const contagemIds = (contagens||[]).map(c => c.id);
+  const contagemPorId = {};
+  (contagens||[]).forEach(c => { contagemPorId[c.id] = c; });
+
+  let itens = [];
+  if (contagemIds.length) {
+    const { data } = await sb.from('inventario_itens').select('*').in('contagem_id', contagemIds);
+    itens = (data||[]).map(i => ({ ...i, loja: contagemPorId[i.contagem_id].loja, statusContagem: contagemPorId[i.contagem_id].status }));
+  }
+  painelItensCacheData = itens;
+}
+
+async function carregarEstoqueMinimoPainel(){
+  const { data } = await sb.from('inventario_estoque_minimo').select('*');
+  painelEstoqueMinimoCache = {};
+  (data||[]).forEach(m => { painelEstoqueMinimoCache[m.categoria+':'+m.item_id] = m.estoque_minimo; });
+}
+
+function renderEstoqueBaixoPainel(){
+  const el = $('painelEstoqueBaixo');
+  if (!painelItensCacheData) { el.innerHTML = '<div class="loading">Carregando…</div>'; return; }
+
+  const itensFiltrados = painelModoEstoque === 'loja'
+    ? painelItensCacheData.filter(i => i.loja === painelLojaSelecionada)
+    : painelItensCacheData;
+
+  const linhas = itensFiltrados.map(i => {
+    const itemId = i.precificacao_produto_id || i.insumo_id;
+    const chave = itemId ? (i.categoria+':'+itemId) : null;
+    const minimo = chave && painelEstoqueMinimoCache[chave] !== undefined ? Number(painelEstoqueMinimoCache[chave]) : null;
+    const zerado = Number(i.quantidade) === 0;
+    const baixo = !zerado && minimo !== null && minimo > 0 && Number(i.quantidade) < minimo;
+    return { ...i, itemId, chave, minimo, zerado, baixo };
+  }).filter(i => i.zerado || i.baixo)
+    .sort((a,b) => (a.zerado===b.zerado ? 0 : (a.zerado ? -1 : 1)) || a.loja.localeCompare(b.loja) || a.nome_produto.localeCompare(b.nome_produto));
+
+  if (!linhas.length){
+    el.innerHTML = '<div class="empty">Nenhum item zerado ou abaixo do mínimo definido, na data selecionada.</div>';
+    return;
+  }
+
+  el.innerHTML = `<div class="table-wrap"><table>
+    <tr><th>Loja</th><th>Categoria</th><th>Item</th><th>Quantidade</th><th>Mínimo</th><th>Situação</th><th>Definir mínimo</th></tr>
+    ${linhas.map((l,idx) => `<tr>
+      <td>${esc(l.loja)}</td>
+      <td>${esc(l.categoria)}</td>
+      <td>${esc(l.nome_produto)}${l.statusContagem!=='finalizada'?' <span class="hint" style="margin:0">(contagem em andamento)</span>':''}</td>
+      <td>${Number(l.quantidade)} ${esc(l.unidade||'')}</td>
+      <td>${l.minimo !== null ? l.minimo : '—'}</td>
+      <td><span class="badge badge-${l.zerado?'zerado':'baixo'}">${l.zerado?'Zerado':'Baixo'}</span></td>
+      <td>${l.chave ? `<input type="number" min="0" step="0.01" class="inp" style="width:80px" id="painelMin_${idx}" value="${l.minimo!==null?l.minimo:''}" placeholder="mín."> <button class="btn-sm btn" onclick="salvarEstoqueMinimoPainel('${l.categoria}','${l.itemId}',${idx})">Salvar</button>` : '—'}</td>
+    </tr>`).join('')}
+  </table></div>`;
+}
+
+async function salvarEstoqueMinimoPainel(categoria, itemId, idx){
+  const valor = Number($('painelMin_'+idx).value);
+  if (isNaN(valor) || valor < 0) { alert('Informe um valor válido.'); return; }
+  const { error } = await sb.from('inventario_estoque_minimo').upsert({
+    categoria, item_id: itemId, estoque_minimo: valor,
+    atualizado_por: meuPerfil.id, atualizado_por_nome: meuPerfil.nome, atualizado_em: new Date().toISOString()
+  }, { onConflict: 'categoria,item_id' });
+  if (error) { alert('Erro ao salvar: ' + error.message); return; }
+  await carregarEstoqueMinimoPainel();
+  renderEstoqueBaixoPainel();
+}
+
+function onBuscarItemPainel(){
+  const termo = $('painelBuscaItem').value.trim().toLowerCase();
+  const el = $('painelBuscaResultado');
+  if (!termo || termo.length < 2 || !painelItensCacheData) { el.innerHTML = ''; return; }
+
+  const porNome = {};
+  painelItensCacheData
+    .filter(i => i.nome_produto.toLowerCase().includes(termo))
+    .forEach(i => {
+      const key = i.categoria+'|'+i.nome_produto;
+      (porNome[key] = porNome[key] || { categoria: i.categoria, nome: i.nome_produto, porLoja: {} }).porLoja[i.loja] = { quantidade: i.quantidade, unidade: i.unidade, status: i.statusContagem };
+    });
+
+  const itensEncontrados = Object.values(porNome);
+  if (!itensEncontrados.length) { el.innerHTML = '<div class="empty">Nenhum item encontrado com contagem na data selecionada.</div>'; return; }
+
+  el.innerHTML = itensEncontrados.map(item => `
+    <h3 style="font-family:'Cormorant Garamond',serif;font-size:1rem;color:var(--bordo-dark);margin:14px 0 6px">${esc(item.nome)} <span class="hint" style="margin:0">(${esc(item.categoria)})</span></h3>
+    <div class="table-wrap"><table>
+      <tr><th>Loja</th><th>Quantidade</th><th>Situação da contagem</th></tr>
+      ${TODAS_LOJAS.map(loja => {
+        const d = item.porLoja[loja];
+        return `<tr><td>${esc(loja)}</td><td>${d ? Number(d.quantidade)+' '+esc(d.unidade||'') : '<span class="hint" style="margin:0">sem contagem nesta data</span>'}</td><td>${d ? (d.status==='finalizada'?'Finalizada':'Em andamento') : '—'}</td></tr>`;
+      }).join('')}
+    </table></div>`).join('');
 }
 
 sb.auth.getSession().then(({ data }) => { if (data && data.session) verificarAcessoEIniciar(); else window.location.href = PORTAL_URL; });
