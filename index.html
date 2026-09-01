@@ -216,6 +216,28 @@ function hojeISO(){ return new Date().toISOString().slice(0,10); }
 function fecharModal(id){ $(id).classList.remove('show'); }
 function showMsg(id, txt, tipo){ const m=$(id); if(!m) return; m.textContent=txt; m.className='msg'+(txt?' show '+(tipo||''):''); }
 function ultimoDiaDoMes(d){ const x = new Date(d.getFullYear(), d.getMonth()+1, 0); return x.getDate() === d.getDate(); }
+function isoDataLocal(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+
+// Decide qual "dia de referência" vale pra hoje, já considerando:
+// - 1 dia de tolerância (dá pra enviar até o dia seguinte ao dia programado)
+// - na semana em que cai o fim do mês, a contagem semanal daquela semana não é necessária
+function calcularDiaReferencia(){
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const ontem = new Date(hoje); ontem.setDate(hoje.getDate()-1);
+
+  const semanaContemMensal = (data) => {
+    const inicio = new Date(data); inicio.setDate(data.getDate() - ((data.getDay()+6)%7)); // segunda-feira da semana
+    for (let i=0;i<7;i++){ const d = new Date(inicio); d.setDate(inicio.getDate()+i); if (ultimoDiaDoMes(d)) return true; }
+    return false;
+  };
+
+  if (ultimoDiaDoMes(hoje)) return { iso: isoDataLocal(hoje), tipo:'mensal', motivo:'Hoje é dia programado para a contagem mensal (fim de mês)', programado:true };
+  if (ultimoDiaDoMes(ontem)) return { iso: isoDataLocal(ontem), tipo:'mensal', motivo:'A contagem mensal de ontem ainda está dentro do prazo (1 dia de tolerância)', programado:true };
+  if (hoje.getDay()===2 && !semanaContemMensal(hoje)) return { iso: isoDataLocal(hoje), tipo:'semanal', motivo:'Hoje é dia programado para a contagem semanal (terça-feira)', programado:true };
+  if (ontem.getDay()===2 && !semanaContemMensal(ontem)) return { iso: isoDataLocal(ontem), tipo:'semanal', motivo:'A contagem semanal de ontem ainda está dentro do prazo (1 dia de tolerância)', programado:true };
+  if (hoje.getDay()===2 && semanaContemMensal(hoje)) return { iso: isoDataLocal(hoje), tipo:null, motivo:'Essa semana já tem a contagem mensal programada — não precisa da semanal também', programado:false, semanalDispensada:true };
+  return { iso: isoDataLocal(hoje), tipo:null, motivo:null, programado:false };
+}
 function chaveItem(categoria, id){ return categoria + ':' + id; }
 
 async function sairApp(){
@@ -362,53 +384,73 @@ async function renderContagem(){
   if (!lojaAtual) { el.innerHTML = '<div class="empty">Selecione uma loja.</div>'; return; }
   el.innerHTML = '<div class="loading">Carregando…</div>';
 
-  const hoje = new Date();
   const hojeStr = hojeISO();
-  const ehTerca = hoje.getDay() === 2;
-  const ehUltimoDia = ultimoDiaDoMes(hoje);
+  const ref = calcularDiaReferencia();
 
-  const { data: existente } = await sb.from('inventario_contagens')
+  const { data: existenteHoje } = await sb.from('inventario_contagens')
     .select('*').eq('loja', lojaAtual).eq('data_contagem', hojeStr).maybeSingle();
 
-  let bannerHtml = '';
-  if (ehTerca || ehUltimoDia) {
-    const motivos = [];
-    if (ehTerca) motivos.push('contagem semanal (terça-feira)');
-    if (ehUltimoDia) motivos.push('contagem adicional de fim de mês');
-    bannerHtml = `<div class="alert-banner ok"><h4>📅 Hoje é dia de contagem</h4>Hoje é dia programado para ${motivos.join(' e ')}. </div>`;
-  } else {
-    bannerHtml = `<div class="alert-banner warn"><h4>Hoje não é um dia programado</h4>A contagem é semanal (terças-feiras), com uma contagem adicional no último dia do mês. Você ainda pode registrar uma contagem hoje se precisar.</div>`;
+  // Se não tem nada hoje ainda, mas o dia de referência é ontem (dentro da
+  // tolerância de 1 dia) e a de ontem não foi finalizada, continua nela.
+  let alvo = existenteHoje;
+  if (!alvo && ref.iso !== hojeStr) {
+    const { data: existenteOntem } = await sb.from('inventario_contagens')
+      .select('*').eq('loja', lojaAtual).eq('data_contagem', ref.iso).maybeSingle();
+    if (existenteOntem && existenteOntem.status !== 'finalizada') alvo = existenteOntem;
   }
 
-  if (existente && existente.status === 'finalizada') {
+  let bannerHtml = '';
+  if (ref.programado) {
+    bannerHtml = `<div class="alert-banner ok"><h4>📅 Dia de contagem</h4>${ref.motivo}.</div>`;
+  } else if (ref.semanalDispensada) {
+    bannerHtml = `<div class="alert-banner info"><h4>📅 Semana de contagem mensal</h4>${ref.motivo}.</div>`;
+  } else {
+    bannerHtml = `<div class="alert-banner warn"><h4>Hoje não é um dia programado</h4>A contagem é semanal (terças-feiras), com uma contagem adicional no último dia do mês — e pode ser enviada até o dia seguinte ao dia de referência. Você ainda pode registrar uma contagem hoje se precisar.</div>`;
+  }
+
+  if (alvo && alvo.status === 'finalizada') {
+    const horasDesde = (Date.now() - new Date(alvo.finalizado_em).getTime()) / 3600000;
+    if (horasDesde <= 48) {
+      contagemAtiva = alvo;
+      const prazoFinal = new Date(new Date(alvo.finalizado_em).getTime() + 48*3600000);
+      el.innerHTML = `<div class="card">
+        <h2>Revisar Contagem — ${esc(lojaAtual)}</h2>
+        <div class="alert-banner info"><h4>✏️ Ainda dentro do prazo de revisão</h4>A contagem de ${fmtData(alvo.data_contagem)} já foi enviada, mas você pode corrigir os itens até ${fmtDataHora(prazoFinal.toISOString())} (48h após o envio). Depois disso, ela é bloqueada.</div>
+        <div id="contFormulario"></div>
+      </div>`;
+      await carregarFormularioContagem(true);
+      return;
+    }
     el.innerHTML = `<div class="card">${bannerHtml}
       <h2>Nova Contagem — ${esc(lojaAtual)}</h2>
-      <div class="alert-banner info"><h4>✔ Contagem de hoje já finalizada</h4>A contagem de ${fmtData(hojeStr)} (${existente.tipo === 'mensal' ? 'mensal' : 'semanal'}) já foi concluída às ${fmtDataHora(existente.finalizado_em)}. Consulte no Histórico.</div>
+      <div class="alert-banner info"><h4>🔒 Contagem bloqueada pra edição</h4>A contagem de ${fmtData(alvo.data_contagem)} (${alvo.tipo === 'mensal' ? 'mensal' : 'semanal'}) foi finalizada em ${fmtDataHora(alvo.finalizado_em)} — o prazo de 48h pra revisão já passou. Consulte no Histórico.</div>
       <button class="btn" onclick="mudarTab('historico')">Ver no Histórico</button>
     </div>`;
     return;
   }
 
-  contagemAtiva = existente || null;
+  contagemAtiva = alvo || null;
+  const dataDefault = ref.iso;
+  const tipoDefault = ref.tipo || 'semanal';
 
   el.innerHTML = `<div class="card">
     ${bannerHtml}
     <h2>Nova Contagem — ${esc(lojaAtual)}</h2>
     <p class="hint">Pese/conte os itens fisicamente na loja e registre aqui. Você pode salvar parcialmente e continuar depois.</p>
     <div class="row">
-      <div class="field"><label>Data da contagem</label><input type="date" class="inp" id="contData" value="${existente ? existente.data_contagem : hojeStr}" ${existente ? 'disabled' : ''}></div>
+      <div class="field"><label>Data da contagem</label><input type="date" class="inp" id="contData" value="${alvo ? alvo.data_contagem : dataDefault}" ${alvo ? 'disabled' : ''}></div>
       <div class="field"><label>Tipo</label>
-        <select class="inp" id="contTipo" ${existente ? 'disabled' : ''}>
-          <option value="semanal" ${(existente ? existente.tipo==='semanal' : !ehUltimoDia)?'selected':''}>Semanal</option>
-          <option value="mensal" ${(existente ? existente.tipo==='mensal' : ehUltimoDia)?'selected':''}>Mensal (fim de mês)</option>
+        <select class="inp" id="contTipo" ${alvo ? 'disabled' : ''}>
+          <option value="semanal" ${(alvo ? alvo.tipo==='semanal' : tipoDefault==='semanal')?'selected':''}>Semanal</option>
+          <option value="mensal" ${(alvo ? alvo.tipo==='mensal' : tipoDefault==='mensal')?'selected':''}>Mensal (fim de mês)</option>
         </select>
       </div>
-      ${!existente ? '<button class="btn" onclick="iniciarContagem()">Iniciar Contagem</button>' : ''}
+      ${!alvo ? '<button class="btn" onclick="iniciarContagem()">Iniciar Contagem</button>' : ''}
     </div>
     <div id="contFormulario"></div>
   </div>`;
 
-  if (existente) {
+  if (alvo) {
     await carregarFormularioContagem();
   }
 }
@@ -436,7 +478,7 @@ async function iniciarContagem(){
   renderContagem();
 }
 
-async function carregarFormularioContagem(){
+async function carregarFormularioContagem(modoRevisao){
   const wrap = $('contFormulario');
   wrap.innerHTML = '<div class="loading">Carregando itens…</div>';
 
@@ -490,12 +532,26 @@ async function carregarFormularioContagem(){
     });
   });
 
-  wrap.innerHTML = html + `
+  wrap.innerHTML = html + (modoRevisao ? `
+    <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap">
+      <button class="btn" onclick="salvarCorrecoes()">💾 Salvar Correções</button>
+    </div>
+    <div id="contMsg" class="msg"></div>` : `
     <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap">
       <button class="btn btn-outline" onclick="salvarRascunho()">Salvar e Continuar Depois</button>
       <button class="btn" onclick="finalizarContagem()">Finalizar Contagem</button>
     </div>
-    <div id="contMsg" class="msg"></div>`;
+    <div id="contMsg" class="msg"></div>`);
+}
+
+async function salvarCorrecoes(){
+  const linhas = coletarLinhasFormulario();
+  const btn = document.querySelector('#contFormulario button.btn');
+  btn.disabled = true; btn.textContent = 'Salvando…';
+  const error = await salvarLinhas(linhas);
+  btn.disabled = false; btn.textContent = '💾 Salvar Correções';
+  if (error) { showMsg('contMsg', 'Erro ao salvar: ' + error.message, 'err'); return; }
+  showMsg('contMsg', 'Correções salvas!', 'ok');
 }
 
 function repetirItem(chave){
@@ -1044,22 +1100,26 @@ async function renderCDLuna(){
 
   if (cdMostrandoHistorico) { await renderHistoricoCD(); return; }
 
-  const hoje = new Date();
   const hojeStr = hojeISO();
-  const ehTerca = hoje.getDay() === 2;
-  const ehUltimoDia = ultimoDiaDoMes(hoje);
+  const ref = calcularDiaReferencia();
 
-  const { data: existente } = await sb.from('inventario_contagens')
+  const { data: existenteHoje } = await sb.from('inventario_contagens')
     .select('*').eq('loja', LOJA_CD).eq('data_contagem', hojeStr).maybeSingle();
 
+  let alvo = existenteHoje;
+  if (!alvo && ref.iso !== hojeStr) {
+    const { data: existenteOntem } = await sb.from('inventario_contagens')
+      .select('*').eq('loja', LOJA_CD).eq('data_contagem', ref.iso).maybeSingle();
+    if (existenteOntem && existenteOntem.status !== 'finalizada') alvo = existenteOntem;
+  }
+
   let bannerHtml = '';
-  if (ehTerca || ehUltimoDia) {
-    const motivos = [];
-    if (ehTerca) motivos.push('contagem semanal (terça-feira)');
-    if (ehUltimoDia) motivos.push('contagem adicional de fim de mês');
-    bannerHtml = `<div class="alert-banner ok"><h4>📅 Hoje é dia de contagem</h4>Hoje é dia programado para ${motivos.join(' e ')}. </div>`;
+  if (ref.programado) {
+    bannerHtml = `<div class="alert-banner ok"><h4>📅 Dia de contagem</h4>${ref.motivo}.</div>`;
+  } else if (ref.semanalDispensada) {
+    bannerHtml = `<div class="alert-banner info"><h4>📅 Semana de contagem mensal</h4>${ref.motivo}.</div>`;
   } else {
-    bannerHtml = `<div class="alert-banner warn"><h4>Hoje não é um dia programado</h4>A contagem é semanal (terças-feiras), com uma contagem adicional no último dia do mês. Você ainda pode registrar uma contagem hoje se precisar.</div>`;
+    bannerHtml = `<div class="alert-banner warn"><h4>Hoje não é um dia programado</h4>A contagem é semanal (terças-feiras), com uma contagem adicional no último dia do mês — e pode ser enviada até o dia seguinte ao dia de referência. Você ainda pode registrar uma contagem hoje se precisar.</div>`;
   }
 
   const cabecalho = `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
@@ -1067,33 +1127,46 @@ async function renderCDLuna(){
       <button class="rank-btn rank-btn-ghost" onclick="cdMostrandoHistorico=true; renderCDLuna()">📜 Ver histórico do CD Luna</button>
     </div>`;
 
-  if (existente && existente.status === 'finalizada') {
+  if (alvo && alvo.status === 'finalizada') {
+    const horasDesde = (Date.now() - new Date(alvo.finalizado_em).getTime()) / 3600000;
+    if (horasDesde <= 48) {
+      cdContagemAtiva = alvo;
+      const prazoFinal = new Date(new Date(alvo.finalizado_em).getTime() + 48*3600000);
+      el.innerHTML = `<div class="card">${cabecalho}
+        <div class="alert-banner info"><h4>✏️ Ainda dentro do prazo de revisão</h4>A contagem de ${fmtData(alvo.data_contagem)} já foi enviada, mas você pode corrigir os itens até ${fmtDataHora(prazoFinal.toISOString())} (48h após o envio).</div>
+        <div id="cdContFormulario"></div>
+      </div>`;
+      await carregarFormularioContagemCD(true);
+      return;
+    }
     el.innerHTML = `<div class="card">${cabecalho}${bannerHtml}
-      <div class="alert-banner info"><h4>✔ Contagem de hoje já finalizada</h4>A contagem de ${fmtData(hojeStr)} (${existente.tipo === 'mensal' ? 'mensal' : 'semanal'}) já foi concluída às ${fmtDataHora(existente.finalizado_em)}.</div>
+      <div class="alert-banner info"><h4>🔒 Contagem bloqueada pra edição</h4>A contagem de ${fmtData(alvo.data_contagem)} (${alvo.tipo === 'mensal' ? 'mensal' : 'semanal'}) foi finalizada em ${fmtDataHora(alvo.finalizado_em)} — o prazo de 48h pra revisão já passou.</div>
     </div>`;
     return;
   }
 
-  cdContagemAtiva = existente || null;
+  cdContagemAtiva = alvo || null;
+  const dataDefault = ref.iso;
+  const tipoDefault = ref.tipo || 'semanal';
 
   el.innerHTML = `<div class="card">
     ${cabecalho}
     ${bannerHtml}
     <p class="hint">Itens do CD Luna (Confeitaria, Embalagem, Uniformes, Variegatos, Produção, Outros — conforme o cadastro do Estoque CD Luna). Você pode salvar parcialmente e continuar depois.</p>
     <div class="row">
-      <div class="field"><label>Data da contagem</label><input type="date" class="inp" id="cdContData" value="${existente ? existente.data_contagem : hojeStr}" ${existente ? 'disabled' : ''}></div>
+      <div class="field"><label>Data da contagem</label><input type="date" class="inp" id="cdContData" value="${alvo ? alvo.data_contagem : dataDefault}" ${alvo ? 'disabled' : ''}></div>
       <div class="field"><label>Tipo</label>
-        <select class="inp" id="cdContTipo" ${existente ? 'disabled' : ''}>
-          <option value="semanal" ${(existente ? existente.tipo==='semanal' : !ehUltimoDia)?'selected':''}>Semanal</option>
-          <option value="mensal" ${(existente ? existente.tipo==='mensal' : ehUltimoDia)?'selected':''}>Mensal (fim de mês)</option>
+        <select class="inp" id="cdContTipo" ${alvo ? 'disabled' : ''}>
+          <option value="semanal" ${(alvo ? alvo.tipo==='semanal' : tipoDefault==='semanal')?'selected':''}>Semanal</option>
+          <option value="mensal" ${(alvo ? alvo.tipo==='mensal' : tipoDefault==='mensal')?'selected':''}>Mensal (fim de mês)</option>
         </select>
       </div>
-      ${!existente ? '<button class="btn" onclick="iniciarContagemCD()">Iniciar Contagem</button>' : ''}
+      ${!alvo ? '<button class="btn" onclick="iniciarContagemCD()">Iniciar Contagem</button>' : ''}
     </div>
     <div id="cdContFormulario"></div>
   </div>`;
 
-  if (existente) await carregarFormularioContagemCD();
+  if (alvo) await carregarFormularioContagemCD();
 }
 
 async function iniciarContagemCD(){
@@ -1119,7 +1192,7 @@ async function iniciarContagemCD(){
   renderCDLuna();
 }
 
-async function carregarFormularioContagemCD(){
+async function carregarFormularioContagemCD(modoRevisao){
   const wrap = $('cdContFormulario');
   wrap.innerHTML = '<div class="loading">Carregando itens…</div>';
 
@@ -1169,12 +1242,26 @@ async function carregarFormularioContagemCD(){
     });
   });
 
-  wrap.innerHTML = html + `
+  wrap.innerHTML = html + (modoRevisao ? `
+    <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap">
+      <button class="btn" onclick="salvarCorrecoesCD()">💾 Salvar Correções</button>
+    </div>
+    <div id="cdContMsg" class="msg"></div>` : `
     <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap">
       <button class="btn btn-outline" onclick="salvarRascunhoCD()">Salvar e Continuar Depois</button>
       <button class="btn" onclick="finalizarContagemCD()">Finalizar Contagem</button>
     </div>
-    <div id="cdContMsg" class="msg"></div>`;
+    <div id="cdContMsg" class="msg"></div>`);
+}
+
+async function salvarCorrecoesCD(){
+  const linhas = coletarLinhasFormularioCD();
+  const btn = document.querySelector('#cdContFormulario button.btn');
+  btn.disabled = true; btn.textContent = 'Salvando…';
+  const error = await salvarLinhasCD(linhas);
+  btn.disabled = false; btn.textContent = '💾 Salvar Correções';
+  if (error) { showMsg('cdContMsg', 'Erro ao salvar: ' + error.message, 'err'); return; }
+  showMsg('cdContMsg', 'Correções salvas!', 'ok');
 }
 
 function repetirItemCD(chave){
