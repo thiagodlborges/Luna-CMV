@@ -783,7 +783,8 @@ async function gerarInventarioPorData(){
   const { data: contagens, error } = await sb.from('inventario_contagens')
     .select('*, inventario_itens(*)')
     .eq('status', 'finalizada')
-    .eq('data_contagem', data);
+    .eq('data_contagem', data)
+    .in('loja', TODAS_LOJAS);
 
   if (error) { el.innerHTML = '<div class="empty">Erro: '+esc(error.message)+'</div>'; return; }
 
@@ -861,7 +862,7 @@ async function carregarRelatorio(){
   const dataIni = $('relDataIni').value;
   const dataFim = $('relDataFim').value;
 
-  let query = sb.from('inventario_contagens').select('*, inventario_itens(*)').eq('status', 'finalizada').order('data_contagem', { ascending: false });
+  let query = sb.from('inventario_contagens').select('*, inventario_itens(*)').eq('status', 'finalizada').in('loja', TODAS_LOJAS).order('data_contagem', { ascending: false });
   if (loja) query = query.eq('loja', loja);
   if (dataIni) query = query.gte('data_contagem', dataIni);
   if (dataFim) query = query.lte('data_contagem', dataFim);
@@ -1644,10 +1645,11 @@ async function carregarValorizacaoPainel(){
   const el = $('painelValorizacao');
   el.innerHTML = '<div class="loading">Carregando…</div>';
 
-  // Busca própria (inclui CD Luna, que fica de fora do resto do Painel Central
-  // por não ser uma "loja" de varejo comum).
+  // Só as lojas de varejo — o CD Luna é um almoxarifado à parte, com suas
+  // próprias categorias internas ("CD Confeitaria", "CD Variegatos" etc.),
+  // que não devem se misturar com as 6 categorias padrão da loja.
   const { data: contagens } = await sb.from('inventario_contagens')
-    .select('id, loja').eq('data_contagem', painelData).in('loja', [...TODAS_LOJAS, LOJA_CD]);
+    .select('id, loja').eq('data_contagem', painelData).in('loja', TODAS_LOJAS);
   const contagemIds = (contagens||[]).map(c => c.id);
   const contagemPorId = {};
   (contagens||[]).forEach(c => { contagemPorId[c.id] = c.loja; });
@@ -1661,15 +1663,17 @@ async function carregarValorizacaoPainel(){
   ]);
 
   // Custo mais recente de cada produto da Precificação, até a data escolhida.
-  // Prioridade: fabrica_loja (é a régua principal) e, quando não existe (caso
-  // de Confeitaria, cujo custo é lançado direto no elo loja_consumidor), cai
-  // pra loja_consumidor e depois loja_delivery.
+  // Prioridade: Precificação — LOJA (loja_consumidor, depois loja_delivery) —
+  // é o custo real por unidade vendida. O elo fabrica_loja fica só como último
+  // recurso, porque em vários itens (ex: Potes) ele guarda o custo da mistura
+  // por KG antes de virar produto final, não o custo por unidade — usar ele
+  // primeiro subvalorizava o estoque.
   const custoPorProdutoElo = {};
   (precosLoja||[]).forEach(p => { (custoPorProdutoElo[p.produto_id] = custoPorProdutoElo[p.produto_id] || {})[p.elo] = Number(p.custo); });
   function custoPrecificacao(produtoId){
     const porElo = custoPorProdutoElo[produtoId];
     if (!porElo) return null;
-    return porElo.fabrica_loja ?? porElo.loja_consumidor ?? porElo.loja_delivery ?? null;
+    return porElo.loja_consumidor ?? porElo.loja_delivery ?? porElo.fabrica_loja ?? null;
   }
 
   // insumo_id (catálogo do Inventário) -> custo espelhado do CD Luna, ou ->
@@ -1680,6 +1684,10 @@ async function carregarValorizacaoPainel(){
     if (c.luna_varejo_produto_id != null && c.custo_referencia != null) custoCDPorInsumo[c.id] = Number(c.custo_referencia);
     if (c.precificacao_produto_id != null) precifIdPorInsumo[c.id] = c.precificacao_produto_id;
   });
+
+  // Gelato é contado em CAIXAS na loja, mas o custo da Precificação é por KG —
+  // cada caixa tem 6kg, então precisa converter antes de multiplicar.
+  const KG_POR_CAIXA_GELATO = 6;
 
   const linhas = (itens||[]).map(i => {
     let custoUnitario = null, origem = 'Sem custo';
@@ -1693,8 +1701,10 @@ async function carregarValorizacaoPainel(){
       custoUnitario = custoPrecificacao(precifIdPorInsumo[i.insumo_id]);
       origem = 'Precificação';
     }
-    const valorTotal = custoUnitario != null ? Number(i.quantidade) * custoUnitario : null;
-    return { loja: contagemPorId[i.contagem_id], categoria: i.categoria, nome: i.nome_produto, unidade: i.unidade, quantidade: Number(i.quantidade), custoUnitario, origem, valorTotal };
+    const fatorConversao = (i.categoria === 'Gelato' && custoUnitario != null) ? KG_POR_CAIXA_GELATO : 1;
+    const custoUnitarioExibido = custoUnitario != null ? custoUnitario * fatorConversao : null; // custo já na unidade contada (ex: por caixa, não por kg)
+    const valorTotal = custoUnitario != null ? Number(i.quantidade) * custoUnitarioExibido : null;
+    return { loja: contagemPorId[i.contagem_id], categoria: i.categoria, nome: i.nome_produto, unidade: i.unidade, quantidade: Number(i.quantidade), custoUnitario: custoUnitarioExibido, origem, valorTotal };
   }).sort((a,b) => a.loja.localeCompare(b.loja) || a.categoria.localeCompare(b.categoria) || a.nome.localeCompare(b.nome));
 
   valorizacaoPainelCache = linhas;
