@@ -182,6 +182,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 const SUPABASE_URL = 'https://pbuhwpcpdcnaheaywmdv.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBidWh3cGNwZGNuYWhlYXl3bWR2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyNjU5MzksImV4cCI6MjA5MTg0MTkzOX0.Mg4PVg96ZiV3C2Rn0GLQU9c7ui_41OlU6Ldqn5jcvyY';
@@ -1449,7 +1450,7 @@ async function renderPainelCentral(){
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
         <h2 style="font-size:1.1rem;margin:0">💰 Valorização de Estoque a Custo</h2>
-        <button class="btn-outline btn btn-sm" onclick="exportarValorizacaoPainelCSV()">⬇ Exportar CSV</button>
+        <button class="btn-outline btn btn-sm" onclick="exportarValorizacaoPainelExcel()">⬇ Exportar Excel</button>
       </div>
       <p class="hint">Custo unitário puxado da Precificação — Loja (elo Fábrica → Loja) pra Gelato/Pote/Confeitaria/Picolé, e do Estoque CD Luna pros itens de lá. Insumo/Bebidas/Variegatos ainda não têm custo cadastrado nesses cadastros — aparecem como "sem custo".</p>
       <div id="painelValorizacao"><div class="loading">Carregando…</div></div>
@@ -1675,19 +1676,24 @@ async function carregarValorizacaoPainel(){
 
 function fmt2(v){ return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 3 }); }
 
-function exportarValorizacaoPainelCSV(){
+function exportarValorizacaoPainelExcel(){
   if (!valorizacaoPainelCache.length) { alert('Gere a valorização antes de exportar (mude a data pra recarregar, se preciso).'); return; }
-  const esc2 = v => `"${String(v).replace(/"/g, '""')}"`;
-  const linhas = [['Loja','Categoria','Item','Quantidade','Unidade','Custo Unitário','Origem do Custo','Valor Total'].map(esc2).join(',')];
-  valorizacaoPainelCache.forEach(l => {
-    linhas.push([l.loja, l.categoria, l.nome, l.quantidade, l.unidade||'', l.custoUnitario!=null?l.custoUnitario.toFixed(4):'', l.origem, l.valorTotal!=null?l.valorTotal.toFixed(2):''].map(esc2).join(','));
-  });
-  const csv = '\uFEFF' + linhas.join('\r\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `valorizacao-estoque-${painelData}.csv`;
-  a.click();
+
+  const linhas = valorizacaoPainelCache.map(l => ({
+    'Loja': l.loja,
+    'Categoria': l.categoria,
+    'Produto': l.nome,
+    'Quantidade': Number(l.quantidade),
+    'Unidade de Medida': l.unidade || '',
+    'Custo Unitário': l.custoUnitario != null ? Number(l.custoUnitario.toFixed(4)) : null,
+    'Custo Total': l.valorTotal != null ? Number(l.valorTotal.toFixed(2)) : null,
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(linhas);
+  ws['!cols'] = [{wch:22},{wch:16},{wch:34},{wch:12},{wch:16},{wch:14},{wch:14}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Valorização de Estoque');
+  XLSX.writeFile(wb, `valorizacao-estoque-${painelData}.xlsx`);
 }
 
 sb.auth.getSession().then(({ data }) => { if (data && data.session) verificarAcessoEIniciar(); else window.location.href = PORTAL_URL; });
