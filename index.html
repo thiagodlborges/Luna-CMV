@@ -398,6 +398,16 @@ async function renderContagem(){
       .select('*').eq('loja', lojaAtual).eq('data_contagem', ref.iso).maybeSingle();
     if (existenteOntem && existenteOntem.status !== 'finalizada') alvo = existenteOntem;
   }
+  // Rede de segurança: se ainda não achou nada (ex: já passou mais de 1 dia
+  // desde a última tentativa), procura qualquer contagem em andamento dessa
+  // loja, não importa a data — evita "perder" uma contagem com item já salvo
+  // e criar uma nova do zero por engano.
+  if (!alvo) {
+    const { data: qualquerEmAndamento } = await sb.from('inventario_contagens')
+      .select('*').eq('loja', lojaAtual).eq('status', 'em_andamento')
+      .order('data_contagem', { ascending: false }).limit(1).maybeSingle();
+    if (qualquerEmAndamento) alvo = qualquerEmAndamento;
+  }
 
   let bannerHtml = '';
   if (ref.programado) {
@@ -1112,6 +1122,12 @@ async function renderCDLuna(){
       .select('*').eq('loja', LOJA_CD).eq('data_contagem', ref.iso).maybeSingle();
     if (existenteOntem && existenteOntem.status !== 'finalizada') alvo = existenteOntem;
   }
+  if (!alvo) {
+    const { data: qualquerEmAndamento } = await sb.from('inventario_contagens')
+      .select('*').eq('loja', LOJA_CD).eq('status', 'em_andamento')
+      .order('data_contagem', { ascending: false }).limit(1).maybeSingle();
+    if (qualquerEmAndamento) alvo = qualquerEmAndamento;
+  }
 
   let bannerHtml = '';
   if (ref.programado) {
@@ -1428,12 +1444,22 @@ async function renderPainelCentral(){
       <h2 style="font-size:1.1rem">🔎 Buscar item em todas as lojas</h2>
       <div class="field" style="max-width:420px"><label>Nome do item</label><input type="text" class="inp" id="painelBuscaItem" placeholder="Digite pra buscar…" oninput="onBuscarItemPainel()"></div>
       <div id="painelBuscaResultado"></div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+        <h2 style="font-size:1.1rem;margin:0">💰 Valorização de Estoque a Custo</h2>
+        <button class="btn-outline btn btn-sm" onclick="exportarValorizacaoPainelCSV()">⬇ Exportar CSV</button>
+      </div>
+      <p class="hint">Custo unitário puxado da Precificação — Loja (elo Fábrica → Loja) pra Gelato/Pote/Confeitaria/Picolé, e do Estoque CD Luna pros itens de lá. Insumo/Bebidas/Variegatos ainda não têm custo cadastrado nesses cadastros — aparecem como "sem custo".</p>
+      <div id="painelValorizacao"><div class="loading">Carregando…</div></div>
     </div>`;
 
   await carregarStatusLojasPainel();
   await carregarDadosEstoquePainel();
   await carregarEstoqueMinimoPainel();
   renderEstoqueBaixoPainel();
+  await carregarValorizacaoPainel();
 }
 
 function onMudarPainelData(){
@@ -1575,6 +1601,93 @@ function onBuscarItemPainel(){
         return `<tr><td>${esc(loja)}</td><td>${d ? Number(d.quantidade)+' '+esc(d.unidade||'') : '<span class="hint" style="margin:0">sem contagem nesta data</span>'}</td><td>${d ? (d.status==='finalizada'?'Finalizada':'Em andamento') : '—'}</td></tr>`;
       }).join('')}
     </table></div>`).join('');
+}
+
+// ── VALORIZAÇÃO DE ESTOQUE A CUSTO (Precificação — Loja + Estoque CD Luna) ──
+let valorizacaoPainelCache = [];
+
+async function carregarValorizacaoPainel(){
+  const el = $('painelValorizacao');
+  el.innerHTML = '<div class="loading">Carregando…</div>';
+
+  // Busca própria (inclui CD Luna, que fica de fora do resto do Painel Central
+  // por não ser uma "loja" de varejo comum).
+  const { data: contagens } = await sb.from('inventario_contagens')
+    .select('id, loja').eq('data_contagem', painelData).in('loja', [...TODAS_LOJAS, LOJA_CD]);
+  const contagemIds = (contagens||[]).map(c => c.id);
+  const contagemPorId = {};
+  (contagens||[]).forEach(c => { contagemPorId[c.id] = c.loja; });
+
+  if (!contagemIds.length){ el.innerHTML = '<div class="empty">Nenhuma contagem nessa data.</div>'; valorizacaoPainelCache = []; return; }
+
+  const [{ data: itens }, { data: precosLoja }, { data: catalogoCD }] = await Promise.all([
+    sb.from('inventario_itens').select('*').in('contagem_id', contagemIds),
+    sb.from('precificacao_precos').select('produto_id, custo, vigencia_inicio').eq('elo','fabrica_loja').eq('status','aprovado').lte('vigencia_inicio', painelData).order('vigencia_inicio'),
+    sb.from('inventario_itens_catalogo').select('id, luna_varejo_produto_id, custo_referencia'),
+  ]);
+
+  // Custo mais recente de cada produto da Precificação — Loja, até a data escolhida
+  const custoPrecificacaoPorProduto = {};
+  (precosLoja||[]).forEach(p => { custoPrecificacaoPorProduto[p.produto_id] = Number(p.custo); });
+
+  // insumo_id (catálogo do Inventário) -> custo espelhado do CD Luna (sincronizado por gatilho)
+  const custoCDPorInsumo = {};
+  (catalogoCD||[]).forEach(c => { if (c.luna_varejo_produto_id != null && c.custo_referencia != null) custoCDPorInsumo[c.id] = Number(c.custo_referencia); });
+
+  const linhas = (itens||[]).map(i => {
+    let custoUnitario = null, origem = 'Sem custo';
+    if (i.precificacao_produto_id && custoPrecificacaoPorProduto[i.precificacao_produto_id] != null) {
+      custoUnitario = custoPrecificacaoPorProduto[i.precificacao_produto_id];
+      origem = 'Precificação';
+    } else if (i.insumo_id && custoCDPorInsumo[i.insumo_id] != null) {
+      custoUnitario = custoCDPorInsumo[i.insumo_id];
+      origem = 'CD Luna';
+    }
+    const valorTotal = custoUnitario != null ? Number(i.quantidade) * custoUnitario : null;
+    return { loja: contagemPorId[i.contagem_id], categoria: i.categoria, nome: i.nome_produto, unidade: i.unidade, quantidade: Number(i.quantidade), custoUnitario, origem, valorTotal };
+  }).sort((a,b) => a.loja.localeCompare(b.loja) || a.categoria.localeCompare(b.categoria) || a.nome.localeCompare(b.nome));
+
+  valorizacaoPainelCache = linhas;
+
+  if (!linhas.length){ el.innerHTML = '<div class="empty">Nenhum item contado nessa data.</div>'; return; }
+
+  const totalGeral = linhas.reduce((s,l) => s + (l.valorTotal||0), 0);
+  const semCusto = linhas.filter(l => l.valorTotal == null).length;
+
+  el.innerHTML = `
+    <div style="background:var(--creme);border-radius:10px;padding:14px 16px;margin-bottom:14px;display:flex;gap:24px;flex-wrap:wrap">
+      <div><div style="font-size:.68rem;text-transform:uppercase;color:var(--text-light)">Valor total (a custo)</div><div style="font-family:'Cormorant Garamond',serif;font-size:1.6rem;font-weight:700;color:var(--bordo-dark)">${fmtMoeda(totalGeral)}</div></div>
+      ${semCusto ? `<div><div style="font-size:.68rem;text-transform:uppercase;color:var(--text-light)">Itens sem custo cadastrado</div><div style="font-family:'Cormorant Garamond',serif;font-size:1.6rem;font-weight:700;color:#B8860B">${semCusto}</div></div>` : ''}
+    </div>
+    <div class="table-wrap"><table>
+      <tr><th>Loja</th><th>Categoria</th><th>Item</th><th>Quantidade</th><th>Custo Unit.</th><th>Origem</th><th>Valor Total</th></tr>
+      ${linhas.map(l => `<tr${l.valorTotal==null?' class="inativo"':''}>
+        <td>${esc(l.loja)}</td>
+        <td>${esc(l.categoria)}</td>
+        <td>${esc(l.nome)}</td>
+        <td>${fmt2(l.quantidade)} ${esc(l.unidade||'')}</td>
+        <td>${l.custoUnitario!=null?fmtMoeda(l.custoUnitario):'—'}</td>
+        <td>${l.origem}</td>
+        <td>${l.valorTotal!=null?fmtMoeda(l.valorTotal):'<span class="hint" style="margin:0">sem custo</span>'}</td>
+      </tr>`).join('')}
+    </table></div>`;
+}
+
+function fmt2(v){ return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 3 }); }
+
+function exportarValorizacaoPainelCSV(){
+  if (!valorizacaoPainelCache.length) { alert('Gere a valorização antes de exportar (mude a data pra recarregar, se preciso).'); return; }
+  const esc2 = v => `"${String(v).replace(/"/g, '""')}"`;
+  const linhas = [['Loja','Categoria','Item','Quantidade','Unidade','Custo Unitário','Origem do Custo','Valor Total'].map(esc2).join(',')];
+  valorizacaoPainelCache.forEach(l => {
+    linhas.push([l.loja, l.categoria, l.nome, l.quantidade, l.unidade||'', l.custoUnitario!=null?l.custoUnitario.toFixed(4):'', l.origem, l.valorTotal!=null?l.valorTotal.toFixed(2):''].map(esc2).join(','));
+  });
+  const csv = '\uFEFF' + linhas.join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `valorizacao-estoque-${painelData}.csv`;
+  a.click();
 }
 
 sb.auth.getSession().then(({ data }) => { if (data && data.session) verificarAcessoEIniciar(); else window.location.href = PORTAL_URL; });
