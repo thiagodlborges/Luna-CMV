@@ -1430,8 +1430,13 @@ async function renderPainelCentral(){
 
   el.innerHTML = `
     <div class="card">
-      <h2>Painel Central</h2>
-      <p class="hint">Visão consolidada de todas as lojas — resumo, status de contagem, estoque baixo/zerado, e busca por item.</p>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
+        <div>
+          <h2>Painel Central</h2>
+          <p class="hint">Visão consolidada de todas as lojas — resumo, status de contagem, estoque baixo/zerado, e busca por item.</p>
+        </div>
+        <button class="btn btn-sm" onclick="exportarValorizacaoPainelExcel()">⬇ Exportar Excel (Valorização de Estoque)</button>
+      </div>
       <div class="row" style="align-items:flex-end">
         <div class="field"><label>Data de referência</label>
           <select class="inp" id="painelDataInput" onchange="onMudarPainelData()">
@@ -1651,26 +1656,42 @@ async function carregarValorizacaoPainel(){
 
   const [{ data: itens }, { data: precosLoja }, { data: catalogoCD }] = await Promise.all([
     sb.from('inventario_itens').select('*').in('contagem_id', contagemIds),
-    sb.from('precificacao_precos').select('produto_id, custo, vigencia_inicio').eq('elo','fabrica_loja').eq('status','aprovado').lte('vigencia_inicio', painelData).order('vigencia_inicio'),
-    sb.from('inventario_itens_catalogo').select('id, luna_varejo_produto_id, custo_referencia'),
+    sb.from('precificacao_precos').select('produto_id, elo, custo, vigencia_inicio').in('elo',['fabrica_loja','loja_consumidor','loja_delivery']).eq('status','aprovado').lte('vigencia_inicio', painelData).order('vigencia_inicio'),
+    sb.from('inventario_itens_catalogo').select('id, luna_varejo_produto_id, custo_referencia, precificacao_produto_id'),
   ]);
 
-  // Custo mais recente de cada produto da Precificação — Loja, até a data escolhida
-  const custoPrecificacaoPorProduto = {};
-  (precosLoja||[]).forEach(p => { custoPrecificacaoPorProduto[p.produto_id] = Number(p.custo); });
+  // Custo mais recente de cada produto da Precificação, até a data escolhida.
+  // Prioridade: fabrica_loja (é a régua principal) e, quando não existe (caso
+  // de Confeitaria, cujo custo é lançado direto no elo loja_consumidor), cai
+  // pra loja_consumidor e depois loja_delivery.
+  const custoPorProdutoElo = {};
+  (precosLoja||[]).forEach(p => { (custoPorProdutoElo[p.produto_id] = custoPorProdutoElo[p.produto_id] || {})[p.elo] = Number(p.custo); });
+  function custoPrecificacao(produtoId){
+    const porElo = custoPorProdutoElo[produtoId];
+    if (!porElo) return null;
+    return porElo.fabrica_loja ?? porElo.loja_consumidor ?? porElo.loja_delivery ?? null;
+  }
 
-  // insumo_id (catálogo do Inventário) -> custo espelhado do CD Luna (sincronizado por gatilho)
+  // insumo_id (catálogo do Inventário) -> custo espelhado do CD Luna, ou ->
+  // vinculado direto a um produto da Precificação (ex: Água com/sem gás)
   const custoCDPorInsumo = {};
-  (catalogoCD||[]).forEach(c => { if (c.luna_varejo_produto_id != null && c.custo_referencia != null) custoCDPorInsumo[c.id] = Number(c.custo_referencia); });
+  const precifIdPorInsumo = {};
+  (catalogoCD||[]).forEach(c => {
+    if (c.luna_varejo_produto_id != null && c.custo_referencia != null) custoCDPorInsumo[c.id] = Number(c.custo_referencia);
+    if (c.precificacao_produto_id != null) precifIdPorInsumo[c.id] = c.precificacao_produto_id;
+  });
 
   const linhas = (itens||[]).map(i => {
     let custoUnitario = null, origem = 'Sem custo';
-    if (i.precificacao_produto_id && custoPrecificacaoPorProduto[i.precificacao_produto_id] != null) {
-      custoUnitario = custoPrecificacaoPorProduto[i.precificacao_produto_id];
+    if (i.precificacao_produto_id && custoPrecificacao(i.precificacao_produto_id) != null) {
+      custoUnitario = custoPrecificacao(i.precificacao_produto_id);
       origem = 'Precificação';
     } else if (i.insumo_id && custoCDPorInsumo[i.insumo_id] != null) {
       custoUnitario = custoCDPorInsumo[i.insumo_id];
       origem = 'CD Luna';
+    } else if (i.insumo_id && precifIdPorInsumo[i.insumo_id] && custoPrecificacao(precifIdPorInsumo[i.insumo_id]) != null) {
+      custoUnitario = custoPrecificacao(precifIdPorInsumo[i.insumo_id]);
+      origem = 'Precificação';
     }
     const valorTotal = custoUnitario != null ? Number(i.quantidade) * custoUnitario : null;
     return { loja: contagemPorId[i.contagem_id], categoria: i.categoria, nome: i.nome_produto, unidade: i.unidade, quantidade: Number(i.quantidade), custoUnitario, origem, valorTotal };
