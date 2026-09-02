@@ -75,6 +75,10 @@
   .badge-mensal{background:#FEF6E7;color:#B8860B}
 
   .alert-banner{border-radius:12px;padding:16px 18px;margin-bottom:18px;font-size:.85rem;line-height:1.5;border:1px solid}
+  .dash-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+  .dash-card{background:var(--creme);border-radius:10px;padding:12px 14px}
+  .dash-card .lbl{font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;color:var(--text-light);margin-bottom:4px}
+  .dash-card .val{font-family:'Cormorant Garamond',serif;font-size:1.4rem;font-weight:700;color:var(--bordo-dark)}
   .alert-banner.warn{background:#FEF6E7;border-color:#F0D9A0;color:#8A6A16}
   .alert-banner.info{background:#EAF2FB;border-color:#BFD8F0;color:#2E6DA4}
   .alert-banner.ok{background:#E8F8F0;border-color:#B7E4C7;color:#2D6A4F}
@@ -212,6 +216,8 @@ let itensAnteriores = {}; // chave -> quantidade (última contagem finalizada)
 
 function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmtData(d){ return d ? new Date(d+'T12:00').toLocaleDateString('pt-BR') : '—'; }
+function fmtMoeda(v){ return (Number(v)||0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' }); }
+function fmtPct(v){ return (Number(v)||0).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 })+'%'; }
 function fmtDataHora(dt){ return dt ? new Date(dt).toLocaleString('pt-BR') : '—'; }
 function hojeISO(){ return new Date().toISOString().slice(0,10); }
 function fecharModal(id){ $(id).classList.remove('show'); }
@@ -742,7 +748,7 @@ async function renderRelatorio(){
     <div class="row">
       <div class="field"><label>Data</label><input type="date" class="inp" id="relDataUnica" value="${hojeISO()}"></div>
       <button class="btn" onclick="gerarInventarioPorData()">Gerar Inventário</button>
-      <button class="btn btn-outline" id="btnExportarPivot" onclick="exportarInventarioPorDataCSV()" style="display:none">⬇ Exportar CSV</button>
+      <button class="btn btn-outline" id="btnExportarPivot" onclick="exportarInventarioPorDataCSV()" style="display:none">⬇ Exportar Excel</button>
     </div>
     <div id="relPivotResultado"></div>
   </div>
@@ -757,7 +763,7 @@ async function renderRelatorio(){
       </select></div>
       <div class="field"><label>De</label><input type="date" class="inp" id="relDataIni" onchange="carregarRelatorio()"></div>
       <div class="field"><label>Até</label><input type="date" class="inp" id="relDataFim" onchange="carregarRelatorio()"></div>
-      <button class="btn btn-outline" onclick="exportarRelatorioCSV()">⬇ Exportar CSV</button>
+      <button class="btn btn-outline" onclick="exportarRelatorioCSV()">⬇ Exportar Excel</button>
     </div>
     <div id="relResultado"><div class="loading">Carregando…</div></div>
   </div>`;
@@ -831,18 +837,18 @@ async function gerarInventarioPorData(){
 function exportarInventarioPorDataCSV(){
   if (!ultimoPivotDados) { alert('Gere o inventário antes de exportar.'); return; }
   const { data, itens, lojasComContagem } = ultimoPivotDados;
-  const esc2 = v => `"${String(v).replace(/"/g, '""')}"`;
-  const linhas = [['Categoria','Item','Unidade', ...lojasComContagem, 'Total'].map(esc2).join(',')];
-  itens.forEach(it => {
-    const total = lojasComContagem.reduce((s, l) => s + (it.porLoja[l] || 0), 0);
-    linhas.push([it.categoria, it.nome, it.unidade||'', ...lojasComContagem.map(l => it.porLoja[l] !== undefined ? it.porLoja[l] : ''), total].map(esc2).join(','));
+  const linhas = itens.map(it => {
+    const linha = { 'Categoria': it.categoria, 'Item': it.nome, 'Unidade': it.unidade || '' };
+    let total = 0;
+    lojasComContagem.forEach(l => { const v = it.porLoja[l]; linha[l] = v !== undefined ? v : ''; total += v || 0; });
+    linha['Total'] = total;
+    return linha;
   });
-  const csv = '\uFEFF' + linhas.join('\r\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `inventario-completo-${data}.csv`;
-  a.click();
+  const ws = XLSX.utils.json_to_sheet(linhas);
+  ws['!cols'] = [{wch:16},{wch:34},{wch:10}, ...lojasComContagem.map(()=>({wch:12})), {wch:12}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Inventário Completo');
+  XLSX.writeFile(wb, `inventario-completo-${data}.xlsx`);
 }
 
 let ultimoRelatorioDados = [];
@@ -880,19 +886,21 @@ async function carregarRelatorio(){
 
 function exportarRelatorioCSV(){
   if (!ultimoRelatorioDados.length) { alert('Não há dados para exportar. Gere o relatório antes.'); return; }
-  const esc2 = v => `"${String(v).replace(/"/g, '""')}"`;
-  const linhas = [['Loja','Data','Tipo','Categoria','Item','Quantidade','Unidade','Repetido da anterior'].map(esc2).join(',')];
+  const linhas = [];
   ultimoRelatorioDados.forEach(c => {
     (c.inventario_itens||[]).forEach(i => {
-      linhas.push([c.loja, fmtData(c.data_contagem), c.tipo, i.categoria, i.nome_produto, Number(i.quantidade), i.unidade||'', i.replicado_anterior?'Sim':'Não'].map(esc2).join(','));
+      linhas.push({
+        'Loja': c.loja, 'Data': fmtData(c.data_contagem), 'Tipo': c.tipo === 'mensal' ? 'Mensal' : 'Semanal',
+        'Categoria': i.categoria, 'Item': i.nome_produto, 'Quantidade': Number(i.quantidade),
+        'Unidade': i.unidade || '', 'Repetido da anterior': i.replicado_anterior ? 'Sim' : 'Não',
+      });
     });
   });
-  const csv = '\uFEFF' + linhas.join('\r\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `inventario-loja-${hojeISO()}.csv`;
-  a.click();
+  const ws = XLSX.utils.json_to_sheet(linhas);
+  ws['!cols'] = [{wch:18},{wch:12},{wch:10},{wch:16},{wch:34},{wch:12},{wch:12},{wch:16}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Relatório');
+  XLSX.writeFile(wb, `inventario-loja-${hojeISO()}.xlsx`);
 }
 
 // ── ABA: ITENS DE INSUMO (CRUD, gerencial) ────────────────
@@ -1408,15 +1416,34 @@ let painelLojaSelecionada = TODAS_LOJAS[0];
 let painelEstoqueMinimoCache = {};
 let painelItensCacheData = null; // cache dos itens carregados pra data atual (evita rebuscar 2x)
 
+let painelDatasDisponiveis = [];
+
 async function renderPainelCentral(){
   const el = $('mainContent');
+  el.innerHTML = '<div class="card"><div class="loading">Carregando…</div></div>';
+
+  // Em vez de um calendário completo (a maioria dos dias não tem contagem
+  // nenhuma), lista só as datas que realmente existem contagem registrada.
+  const { data: datasRaw } = await sb.from('inventario_contagens').select('data_contagem').order('data_contagem', { ascending: false });
+  painelDatasDisponiveis = [...new Set((datasRaw||[]).map(d => d.data_contagem))];
+  if (!painelDatasDisponiveis.includes(painelData) && painelDatasDisponiveis.length) painelData = painelDatasDisponiveis[0];
+
   el.innerHTML = `
     <div class="card">
       <h2>Painel Central</h2>
-      <p class="hint">Visão consolidada de todas as lojas — status de contagem, estoque baixo/zerado, e busca por item.</p>
+      <p class="hint">Visão consolidada de todas as lojas — resumo, status de contagem, estoque baixo/zerado, e busca por item.</p>
       <div class="row" style="align-items:flex-end">
-        <div class="field"><label>Data de referência</label><input type="date" class="inp" id="painelDataInput" value="${painelData}" onchange="onMudarPainelData()"></div>
+        <div class="field"><label>Data de referência</label>
+          <select class="inp" id="painelDataInput" onchange="onMudarPainelData()">
+            ${painelDatasDisponiveis.map(d => `<option value="${d}" ${d===painelData?'selected':''}>${fmtData(d)}</option>`).join('') || '<option>Nenhuma contagem registrada ainda</option>'}
+          </select>
+        </div>
       </div>
+    </div>
+
+    <div class="card">
+      <h2 style="font-size:1.1rem">📊 Resumo Consolidado — ${fmtData(painelData)}</h2>
+      <div id="painelDashboard"><div class="loading">Carregando…</div></div>
     </div>
 
     <div class="card">
@@ -1461,6 +1488,7 @@ async function renderPainelCentral(){
   await carregarEstoqueMinimoPainel();
   renderEstoqueBaixoPainel();
   await carregarValorizacaoPainel();
+  renderDashboardPainel();
 }
 
 function onMudarPainelData(){
@@ -1675,6 +1703,41 @@ async function carregarValorizacaoPainel(){
 }
 
 function fmt2(v){ return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 3 }); }
+
+function renderDashboardPainel(){
+  const el = $('painelDashboard');
+  const linhas = valorizacaoPainelCache || [];
+  if (!linhas.length){ el.innerHTML = '<div class="empty">Nenhuma contagem nessa data.</div>'; return; }
+
+  const totalItens = linhas.length;
+  const valorTotalGeral = linhas.reduce((s,l) => s + (l.valorTotal||0), 0);
+  const semCusto = linhas.filter(l => l.valorTotal == null).length;
+  const lojasComContagem = new Set(linhas.map(l => l.loja)).size;
+
+  const porCategoria = {};
+  linhas.forEach(l => {
+    const c = porCategoria[l.categoria] = porCategoria[l.categoria] || { itens: 0, valor: 0 };
+    c.itens++; c.valor += l.valorTotal || 0;
+  });
+  const categorias = Object.keys(porCategoria).sort((a,b) => porCategoria[b].valor - porCategoria[a].valor);
+
+  el.innerHTML = `
+    <div class="dash-grid" style="margin-bottom:16px">
+      <div class="dash-card"><div class="lbl">Lojas com contagem</div><div class="val">${lojasComContagem}</div></div>
+      <div class="dash-card"><div class="lbl">Total de itens contados</div><div class="val">${totalItens}</div></div>
+      <div class="dash-card"><div class="lbl">Valor total em estoque</div><div class="val">${fmtMoeda(valorTotalGeral)}</div></div>
+      ${semCusto ? `<div class="dash-card"><div class="lbl">Itens sem custo cadastrado</div><div class="val" style="color:#B8860B">${semCusto}</div></div>` : ''}
+    </div>
+    <div class="table-wrap"><table>
+      <tr><th>Categoria</th><th>Itens contados</th><th>Valor em estoque</th><th>% do total</th></tr>
+      ${categorias.map(c => `<tr>
+        <td>${esc(c)}</td>
+        <td>${porCategoria[c].itens}</td>
+        <td>${fmtMoeda(porCategoria[c].valor)}</td>
+        <td>${valorTotalGeral>0 ? fmtPct(porCategoria[c].valor/valorTotalGeral*100) : '—'}</td>
+      </tr>`).join('')}
+    </table></div>`;
+}
 
 function exportarValorizacaoPainelExcel(){
   if (!valorizacaoPainelCache.length) { alert('Gere a valorização antes de exportar (mude a data pra recarregar, se preciso).'); return; }
