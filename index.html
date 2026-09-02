@@ -1697,7 +1697,7 @@ async function carregarValorizacaoPainel(){
   const custoCDPorInsumo = {};
   const precifIdPorInsumo = {};
   (catalogoCD||[]).forEach(c => {
-    if (c.luna_varejo_produto_id != null && c.custo_referencia != null) custoCDPorInsumo[c.id] = Number(c.custo_referencia);
+    if (c.custo_referencia != null) custoCDPorInsumo[c.id] = Number(c.custo_referencia);
     if (c.precificacao_produto_id != null) precifIdPorInsumo[c.id] = c.precificacao_produto_id;
   });
 
@@ -1708,7 +1708,7 @@ async function carregarValorizacaoPainel(){
       origem = 'Precificação';
     } else if (i.insumo_id && custoCDPorInsumo[i.insumo_id] != null) {
       custoUnitario = custoCDPorInsumo[i.insumo_id];
-      origem = 'CD Luna';
+      origem = 'Custo cadastrado';
     } else if (i.insumo_id && precifIdPorInsumo[i.insumo_id] && custoParaLoja(precifIdPorInsumo[i.insumo_id], i.categoria) != null) {
       custoUnitario = custoParaLoja(precifIdPorInsumo[i.insumo_id], i.categoria);
       origem = 'Precificação';
