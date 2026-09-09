@@ -409,11 +409,20 @@ async function renderContagem(){
   // desde a última tentativa), procura qualquer contagem em andamento dessa
   // loja, não importa a data — evita "perder" uma contagem com item já salvo
   // e criar uma nova do zero por engano.
+  // IMPORTANTE: só adota essa contagem antiga se ela realmente tiver algum
+  // item salvo. Uma contagem "em_andamento" vazia (a pessoa clicou em
+  // "Iniciar Contagem" e nunca chegou a lançar nada) não tem nada a proteger
+  // — sem essa checagem, esse rascunho vazio ficava travando a tela pra
+  // sempre, impedindo até de trocar a data pra abrir a contagem da semana atual.
   if (!alvo) {
     const { data: qualquerEmAndamento } = await sb.from('inventario_contagens')
       .select('*').eq('loja', lojaAtual).eq('status', 'em_andamento')
       .order('data_contagem', { ascending: false }).limit(1).maybeSingle();
-    if (qualquerEmAndamento) alvo = qualquerEmAndamento;
+    if (qualquerEmAndamento) {
+      const { count } = await sb.from('inventario_itens')
+        .select('id', { count: 'exact', head: true }).eq('contagem_id', qualquerEmAndamento.id);
+      if (count > 0) alvo = qualquerEmAndamento;
+    }
   }
 
   let bannerHtml = '';
@@ -464,12 +473,21 @@ async function renderContagem(){
       </div>
       ${!alvo ? '<button class="btn" onclick="iniciarContagem()">Iniciar Contagem</button>' : ''}
     </div>
+    ${alvo && alvo.status === 'em_andamento' ? `<p class="hint">Data errada ou contagem começada por engano? <a href="#" onclick="descartarContagem(${alvo.id}); return false;">Descartar esta contagem e começar uma nova</a>.</p>` : ''}
     <div id="contFormulario"></div>
   </div>`;
 
   if (alvo) {
     await carregarFormularioContagem();
   }
+}
+
+async function descartarContagem(id){
+  if (!confirm('Descartar esta contagem em andamento? Todos os itens já lançados nela serão apagados e você poderá começar uma nova, com a data que quiser.')) return;
+  const { error } = await sb.from('inventario_contagens').delete().eq('id', id);
+  if (error) { alert('Erro ao descartar: ' + error.message); return; }
+  contagemAtiva = null;
+  renderContagem();
 }
 
 async function iniciarContagem(){
@@ -1136,7 +1154,11 @@ async function renderCDLuna(){
     const { data: qualquerEmAndamento } = await sb.from('inventario_contagens')
       .select('*').eq('loja', LOJA_CD).eq('status', 'em_andamento')
       .order('data_contagem', { ascending: false }).limit(1).maybeSingle();
-    if (qualquerEmAndamento) alvo = qualquerEmAndamento;
+    if (qualquerEmAndamento) {
+      const { count } = await sb.from('inventario_itens')
+        .select('id', { count: 'exact', head: true }).eq('contagem_id', qualquerEmAndamento.id);
+      if (count > 0) alvo = qualquerEmAndamento;
+    }
   }
 
   let bannerHtml = '';
@@ -1189,10 +1211,19 @@ async function renderCDLuna(){
       </div>
       ${!alvo ? '<button class="btn" onclick="iniciarContagemCD()">Iniciar Contagem</button>' : ''}
     </div>
+    ${alvo && alvo.status === 'em_andamento' ? `<p class="hint">Data errada ou contagem começada por engano? <a href="#" onclick="descartarContagemCD(${alvo.id}); return false;">Descartar esta contagem e começar uma nova</a>.</p>` : ''}
     <div id="cdContFormulario"></div>
   </div>`;
 
   if (alvo) await carregarFormularioContagemCD();
+}
+
+async function descartarContagemCD(id){
+  if (!confirm('Descartar esta contagem em andamento? Todos os itens já lançados nela serão apagados e você poderá começar uma nova, com a data que quiser.')) return;
+  const { error } = await sb.from('inventario_contagens').delete().eq('id', id);
+  if (error) { alert('Erro ao descartar: ' + error.message); return; }
+  cdContagemAtiva = null;
+  renderCDLuna();
 }
 
 async function iniciarContagemCD(){
