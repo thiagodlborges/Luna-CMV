@@ -740,6 +740,7 @@ async function verDetalheContagem(id){
 
   if (!cont) { wrap.innerHTML = '<div class="card"><div class="empty">Contagem não encontrada.</div></div>'; return; }
 
+  detalheContagemAtual = { cont, itens: itens || [] };
   const grupos = {};
   (itens || []).forEach(i => { (grupos[i.categoria] = grupos[i.categoria] || []).push(i); });
 
@@ -753,8 +754,27 @@ async function verDetalheContagem(id){
         ${grupos[cat].map(i => `<tr><td>${esc(i.nome_produto)}${i.replicado_anterior ? ' <span class="badge badge-semanal">repetido</span>' : ''}</td><td>${Number(i.quantidade)}</td><td>${esc(i.unidade||'')}</td></tr>`).join('')}
       </table></div>
     `).join('') || '<div class="empty">Nenhum item registrado nesta contagem.</div>'}
+    <button class="btn btn-outline" onclick="exportarDetalheContagemExcel()">⬇ Exportar Excel</button>
     <button class="modal-close" onclick="document.getElementById('histDetalheWrap').innerHTML=''">Fechar</button>
   </div>`;
+}
+
+let detalheContagemAtual = null;
+function exportarDetalheContagemExcel(){
+  if (!detalheContagemAtual || !detalheContagemAtual.itens.length) { alert('Não há itens para exportar nesta contagem.'); return; }
+  const { cont, itens } = detalheContagemAtual;
+  const ordenados = [...itens].sort((a,b)=>ORDEM_CATEGORIAS.indexOf(a.categoria)-ORDEM_CATEGORIAS.indexOf(b.categoria));
+  const linhas = ordenados.map(i => ({
+    'Loja': cont.loja, 'Data': fmtData(cont.data_contagem), 'Tipo': cont.tipo === 'mensal' ? 'Mensal' : 'Semanal',
+    'Categoria': i.categoria, 'Item': i.nome_produto, 'Quantidade': Number(i.quantidade),
+    'Unidade': i.unidade || '', 'Repetido da anterior': i.replicado_anterior ? 'Sim' : 'Não',
+  }));
+  const ws = XLSX.utils.json_to_sheet(linhas);
+  ws['!cols'] = [{wch:18},{wch:12},{wch:10},{wch:16},{wch:34},{wch:12},{wch:12},{wch:16}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Inventário');
+  const nomeLoja = String(cont.loja).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]+/g,'-').replace(/^-|-$/g,'').toLowerCase();
+  XLSX.writeFile(wb, `inventario-${nomeLoja}-${cont.data_contagem}.xlsx`);
 }
 
 // ── ABA: RELATÓRIO CONSOLIDADO (gerencial) ────────────────
