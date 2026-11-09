@@ -337,6 +337,15 @@ function renderTab(){
   (fns[currentTab] || renderContagem)();
 }
 
+// Gelato passou a ser contado em KG (antes era em caixas de 6kg). Contagens antigas
+// continuam gravadas com unidade 'caixa' (histórico preservado); ao reaproveitar o
+// valor delas numa contagem nova/edição, converte caixa -> kg.
+const KG_POR_CAIXA_GELATO = 6;
+function qtdNaUnidadeAtual(i){
+  const q = Number(i.quantidade);
+  return (i.categoria === 'Gelato' && i.unidade === 'caixa') ? q * KG_POR_CAIXA_GELATO : q;
+}
+
 // ── CATÁLOGO (Gelato/Pote/Confeitaria/Picolé vem da Precificação; as demais
 // categorias são gerenciáveis dentro do próprio módulo, em "Categorias e Itens") ──
 async function carregarCatalogo(){
@@ -362,7 +371,7 @@ async function carregarCatalogo(){
       // Considera gelatos inativos também (pode haver estoque de sabor descontinuado);
       // demais categorias, só ativos.
       if (p.ativo || p.categoria === 'Gelato') {
-        catalogoCache[p.categoria].push({ id: p.id, nome: p.nome, ativo: p.ativo, unidade: p.categoria === 'Gelato' ? 'caixa' : 'unid.' });
+        catalogoCache[p.categoria].push({ id: p.id, nome: p.nome, ativo: p.ativo, unidade: p.categoria === 'Gelato' ? 'kg' : 'unid.' });
       }
     });
   }
@@ -522,7 +531,7 @@ async function carregarFormularioContagem(modoRevisao){
   itensAtuais = {};
   (itensExistentes || []).forEach(i => {
     const id = i.precificacao_produto_id || i.insumo_id;
-    itensAtuais[chaveItem(i.categoria, id)] = { quantidade: i.quantidade, replicado: i.replicado_anterior };
+    itensAtuais[chaveItem(i.categoria, id)] = { quantidade: qtdNaUnidadeAtual(i), replicado: i.replicado_anterior };
   });
 
   // Última contagem finalizada anterior a esta, pra permitir "repetir"
@@ -536,7 +545,7 @@ async function carregarFormularioContagem(modoRevisao){
     const { data: itensAnt } = await sb.from('inventario_itens').select('*').eq('contagem_id', anteriorHead.id);
     (itensAnt || []).forEach(i => {
       const id = i.precificacao_produto_id || i.insumo_id;
-      itensAnteriores[chaveItem(i.categoria, id)] = i.quantidade;
+      itensAnteriores[chaveItem(i.categoria, id)] = qtdNaUnidadeAtual(i);
     });
   }
 
@@ -1516,7 +1525,7 @@ async function renderPainelCentral(){
         <h2 style="font-size:1.1rem;margin:0">💰 Valorização de Estoque a Custo</h2>
         <button class="btn-outline btn btn-sm" onclick="exportarValorizacaoPainelExcel()">⬇ Exportar Excel</button>
       </div>
-      <p class="hint">Gelato/Pote/Picolé: preço de venda da Fábrica pra Loja (é o custo real de aquisição da loja; Gelato multiplicado por 6kg/caixa). Confeitaria: custo cadastrado na Precificação — Loja. Itens do CD Luna: custo cadastrado lá. Insumo/Bebidas/Variegatos sem vínculo ainda aparecem como "sem custo".</p>
+      <p class="hint">Gelato/Pote/Picolé: preço de venda da Fábrica pra Loja (é o custo real de aquisição da loja; Gelato é por kg; contagens antigas em caixa são multiplicadas por 6kg/caixa). Confeitaria: custo cadastrado na Precificação — Loja. Itens do CD Luna: custo cadastrado lá. Insumo/Bebidas/Variegatos sem vínculo ainda aparecem como "sem custo".</p>
       <div id="painelValorizacao"><div class="loading">Carregando…</div></div>
     </div>`;
 
@@ -1707,20 +1716,18 @@ async function carregarValorizacaoPainel(){
     (dadosPorProdutoElo[p.produto_id] = dadosPorProdutoElo[p.produto_id] || {})[p.elo] = { custo: Number(p.custo), precoVenda: Number(p.preco_venda) };
   });
 
-  // Gelato é contado em CAIXAS na loja — cada caixa tem 6kg, e o preço da
-  // fábrica é por KG, então precisa multiplicar antes de comparar/usar.
-  const KG_POR_CAIXA_GELATO = 6;
-
+  // Gelato: contagens antigas estão em CAIXAS (6kg) e as novas em KG. O preço da
+  // fábrica é por KG, então só multiplica por 6 quando a unidade gravada é 'caixa'.
   // custo pra loja = o que ela pagou pra adquirir aquela unidade contada.
-  function custoParaLoja(produtoId, categoria){
+  function custoParaLoja(produtoId, categoria, unidade){
+    const fatorG = (categoria === 'Gelato' && unidade === 'caixa') ? KG_POR_CAIXA_GELATO : 1;
     const porElo = dadosPorProdutoElo[produtoId];
     if (!porElo) return null;
     if (['Gelato','Potes','Picolés'].includes(categoria) && porElo.fabrica_loja) {
-      const fator = categoria === 'Gelato' ? KG_POR_CAIXA_GELATO : 1;
-      return porElo.fabrica_loja.precoVenda * fator;
+      return porElo.fabrica_loja.precoVenda * fatorG;
     }
     // Confeitaria (ou Gelato/Pote/Picolé sem preço fábrica cadastrado, ex: itens montados na loja)
-    return porElo.loja_consumidor?.custo ?? porElo.loja_delivery?.custo ?? (porElo.fabrica_loja ? porElo.fabrica_loja.precoVenda * (categoria==='Gelato'?KG_POR_CAIXA_GELATO:1) : null) ?? null;
+    return porElo.loja_consumidor?.custo ?? porElo.loja_delivery?.custo ?? (porElo.fabrica_loja ? porElo.fabrica_loja.precoVenda * fatorG : null) ?? null;
   }
 
   // insumo_id (catálogo do Inventário) -> custo espelhado do CD Luna, ou ->
@@ -1734,14 +1741,14 @@ async function carregarValorizacaoPainel(){
 
   const linhas = (itens||[]).map(i => {
     let custoUnitario = null, origem = 'Sem custo';
-    if (i.precificacao_produto_id && custoParaLoja(i.precificacao_produto_id, i.categoria) != null) {
-      custoUnitario = custoParaLoja(i.precificacao_produto_id, i.categoria);
+    if (i.precificacao_produto_id && custoParaLoja(i.precificacao_produto_id, i.categoria, i.unidade) != null) {
+      custoUnitario = custoParaLoja(i.precificacao_produto_id, i.categoria, i.unidade);
       origem = 'Precificação';
     } else if (i.insumo_id && custoCDPorInsumo[i.insumo_id] != null) {
       custoUnitario = custoCDPorInsumo[i.insumo_id];
       origem = 'Custo cadastrado';
-    } else if (i.insumo_id && precifIdPorInsumo[i.insumo_id] && custoParaLoja(precifIdPorInsumo[i.insumo_id], i.categoria) != null) {
-      custoUnitario = custoParaLoja(precifIdPorInsumo[i.insumo_id], i.categoria);
+    } else if (i.insumo_id && precifIdPorInsumo[i.insumo_id] && custoParaLoja(precifIdPorInsumo[i.insumo_id], i.categoria, i.unidade) != null) {
+      custoUnitario = custoParaLoja(precifIdPorInsumo[i.insumo_id], i.categoria, i.unidade);
       origem = 'Precificação';
     }
     const valorTotal = custoUnitario != null ? Number(i.quantidade) * custoUnitario : null;
