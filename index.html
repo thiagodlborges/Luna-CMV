@@ -341,9 +341,25 @@ function renderTab(){
 // continuam gravadas com unidade 'caixa' (histórico preservado); ao reaproveitar o
 // valor delas numa contagem nova/edição, converte caixa -> kg.
 const KG_POR_CAIXA_GELATO = 6;
-function qtdNaUnidadeAtual(i){
+// ATENÇÃO: a unidade gravada ('caixa') NÃO é confiável pra saber se a contagem
+// foi mesmo em caixas. Cada loja passou a pesar o Gelato em kg numa data
+// diferente (Tucuruvi, Jundiaí, Indaiatuba e Esplanada já em ago/set; outras só
+// em 31/10; algumas ainda contam caixas inteiras), mas o rótulo 'caixa' ficou
+// gravado em todas até 09/11. Então decide por CONTAGEM, olhando os valores:
+// caixas reais são poucas e inteiras (ou meia caixa); kg pesado tem decimais
+// (ex: 17,914) ou passa de 6.
+// `itensDaContagem` = todos os itens (qualquer categoria) de UMA contagem.
+function gelatoContagemEmCaixaReal(itensDaContagem){
+  const gelatos = (itensDaContagem || []).filter(i => i.categoria === 'Gelato' && i.unidade === 'caixa');
+  if (!gelatos.length) return false;
+  return gelatos.every(i => {
+    const q = Number(i.quantidade);
+    return q <= 6 && Math.abs(q * 2 - Math.round(q * 2)) < 1e-9;
+  });
+}
+function qtdNaUnidadeAtual(i, contagemEmCaixaReal){
   const q = Number(i.quantidade);
-  return (i.categoria === 'Gelato' && i.unidade === 'caixa') ? q * KG_POR_CAIXA_GELATO : q;
+  return (i.categoria === 'Gelato' && i.unidade === 'caixa' && contagemEmCaixaReal) ? q * KG_POR_CAIXA_GELATO : q;
 }
 
 // ── CATÁLOGO (Gelato/Pote/Confeitaria/Picolé vem da Precificação; as demais
@@ -529,9 +545,10 @@ async function carregarFormularioContagem(modoRevisao){
   // Itens já lançados nesta contagem (rascunho)
   const { data: itensExistentes } = await sb.from('inventario_itens').select('*').eq('contagem_id', contagemAtiva.id);
   itensAtuais = {};
+  const atualEmCaixa = gelatoContagemEmCaixaReal(itensExistentes);
   (itensExistentes || []).forEach(i => {
     const id = i.precificacao_produto_id || i.insumo_id;
-    itensAtuais[chaveItem(i.categoria, id)] = { quantidade: qtdNaUnidadeAtual(i), replicado: i.replicado_anterior };
+    itensAtuais[chaveItem(i.categoria, id)] = { quantidade: qtdNaUnidadeAtual(i, atualEmCaixa), replicado: i.replicado_anterior };
   });
 
   // Última contagem finalizada anterior a esta, pra permitir "repetir"
@@ -543,9 +560,10 @@ async function carregarFormularioContagem(modoRevisao){
   itensAnteriores = {};
   if (anteriorHead) {
     const { data: itensAnt } = await sb.from('inventario_itens').select('*').eq('contagem_id', anteriorHead.id);
+    const anteriorEmCaixa = gelatoContagemEmCaixaReal(itensAnt);
     (itensAnt || []).forEach(i => {
       const id = i.precificacao_produto_id || i.insumo_id;
-      itensAnteriores[chaveItem(i.categoria, id)] = qtdNaUnidadeAtual(i);
+      itensAnteriores[chaveItem(i.categoria, id)] = qtdNaUnidadeAtual(i, anteriorEmCaixa);
     });
   }
 
@@ -1719,8 +1737,14 @@ async function carregarValorizacaoPainel(){
   // Gelato: contagens antigas estão em CAIXAS (6kg) e as novas em KG. O preço da
   // fábrica é por KG, então só multiplica por 6 quando a unidade gravada é 'caixa'.
   // custo pra loja = o que ela pagou pra adquirir aquela unidade contada.
-  function custoParaLoja(produtoId, categoria, unidade){
-    const fatorG = (categoria === 'Gelato' && unidade === 'caixa') ? KG_POR_CAIXA_GELATO : 1;
+  // Só vale o fator 6 quando a contagem inteira é de caixas reais (ver
+  // gelatoContagemEmCaixaReal) — o rótulo 'caixa' sozinho não basta.
+  const itensPorContagem = {};
+  (itens||[]).forEach(i => { (itensPorContagem[i.contagem_id] = itensPorContagem[i.contagem_id] || []).push(i); });
+  const contagensEmCaixaReal = new Set(Object.keys(itensPorContagem).filter(id => gelatoContagemEmCaixaReal(itensPorContagem[id])).map(Number));
+
+  function custoParaLoja(produtoId, categoria, unidade, contagemId){
+    const fatorG = (categoria === 'Gelato' && unidade === 'caixa' && contagensEmCaixaReal.has(contagemId)) ? KG_POR_CAIXA_GELATO : 1;
     const porElo = dadosPorProdutoElo[produtoId];
     if (!porElo) return null;
     if (['Gelato','Potes','Picolés'].includes(categoria) && porElo.fabrica_loja) {
@@ -1741,14 +1765,14 @@ async function carregarValorizacaoPainel(){
 
   const linhas = (itens||[]).map(i => {
     let custoUnitario = null, origem = 'Sem custo';
-    if (i.precificacao_produto_id && custoParaLoja(i.precificacao_produto_id, i.categoria, i.unidade) != null) {
-      custoUnitario = custoParaLoja(i.precificacao_produto_id, i.categoria, i.unidade);
+    if (i.precificacao_produto_id && custoParaLoja(i.precificacao_produto_id, i.categoria, i.unidade, i.contagem_id) != null) {
+      custoUnitario = custoParaLoja(i.precificacao_produto_id, i.categoria, i.unidade, i.contagem_id);
       origem = 'Precificação';
     } else if (i.insumo_id && custoCDPorInsumo[i.insumo_id] != null) {
       custoUnitario = custoCDPorInsumo[i.insumo_id];
       origem = 'Custo cadastrado';
-    } else if (i.insumo_id && precifIdPorInsumo[i.insumo_id] && custoParaLoja(precifIdPorInsumo[i.insumo_id], i.categoria, i.unidade) != null) {
-      custoUnitario = custoParaLoja(precifIdPorInsumo[i.insumo_id], i.categoria, i.unidade);
+    } else if (i.insumo_id && precifIdPorInsumo[i.insumo_id] && custoParaLoja(precifIdPorInsumo[i.insumo_id], i.categoria, i.unidade, i.contagem_id) != null) {
+      custoUnitario = custoParaLoja(precifIdPorInsumo[i.insumo_id], i.categoria, i.unidade, i.contagem_id);
       origem = 'Precificação';
     }
     const valorTotal = custoUnitario != null ? Number(i.quantidade) * custoUnitario : null;
